@@ -1,0 +1,3 @@
+{ "name": "Seedling, an idle civilization", "short_name": "Seedling", "start_url": "./", "scope": "./", "display": "standalone",
+  "background_color": "#14233a", "theme_color": "#14233a",
+  "icons": [{ "src": "icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }] }

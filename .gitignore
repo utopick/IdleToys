@@ -1,0 +1,13 @@
+.DS_Store
+shots/
+.venv/
+node_modules/
+__pycache__/
+*.log
+
+# Reference pictures are other people's art: kept locally only (their notes are tracked)
+*/inspiration/*.png
+*/inspiration/*.jpg
+*/inspiration/*.jpeg
+*/inspiration/*.gif
+*/inspiration/*.webp
