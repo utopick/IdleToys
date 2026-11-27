@@ -93,7 +93,7 @@ Our own code in `TP/` (read-only: never change the originals; say in the docs wh
 - **Any screen:** it reads well on a phone, a desktop and a TV. Touch first: big targets, no hover, no right click. Keys and a mouse also work.
 - **No HUD, art first:** text only when nothing else can say it, and never while idle.
 - **Idle first, steer not control.**
-- Sound starts on the first tap (browsers block autoplay) and can be muted; the choice is remembered.
+- Sound starts on the first tap (browsers block autoplay) and can be muted; the choice is remembered. Start or resume the `AudioContext` on `pointerup` or `click`, **never on `pointerdown`**: on phones a touch's pointerdown doesn't count as a user gesture, so the sound stays silent (found in round two).
 - **Saved data must keep loading** in every later version: version the save, fill in what old saves lack, never renumber or rename what is stored. Storage keys start with this project's name. Wrap storage in try/catch.
 - Anything loaded or fetched is untrusted: check it, and never put text into `innerHTML` unescaped.
 - Respect `prefers-reduced-motion` for flashes and shakes.

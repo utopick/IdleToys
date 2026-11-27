@@ -1,0 +1,3353 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
+<meta name="theme-color" content="#07060c">
+<title>Dungeon Town</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<style>
+html,body{margin:0;height:100%;background:#07060c;overflow:hidden;touch-action:none;-webkit-user-select:none;user-select:none}
+canvas#v{position:fixed;inset:0;width:100%;height:100%;image-rendering:pixelated;display:block}
+#hud{position:fixed;left:0;right:0;bottom:max(14px,env(safe-area-inset-bottom));display:flex;justify-content:center;gap:14px;opacity:0;pointer-events:none;transition:opacity .5s}
+#hud.on{opacity:1;pointer-events:auto}
+#hud button{width:64px;height:64px;padding:8px;border:3px solid #6b5a3a;border-radius:6px;background:#17131ccc;cursor:pointer;box-shadow:0 3px 0 #000}
+#hud button:active{transform:translateY(2px)}
+#hud button.wait{opacity:.35}
+#hud svg{width:100%;height:100%;display:block}
+#tag,#chron{position:fixed;left:50%;transform:translateX(-50%);font:16px/1.4 ui-monospace,Menlo,Consolas,monospace;color:#e8dcb8;background:#17131ce6;border:3px solid #6b5a3a;border-radius:6px;padding:10px 14px;max-width:min(86vw,560px);opacity:0;transition:opacity .6s;pointer-events:none;text-align:center}
+#tag{top:max(14px,env(safe-area-inset-top))}
+#chron{top:18%;text-align:left}
+#tag.on,#chron.on{opacity:1}
+#chron small{display:block;margin-top:8px;color:#9c8f6e;font-size:11px}
+</style>
+</head>
+<body>
+<canvas id="v"></canvas>
+<div id="tag" role="status"></div>
+<div id="chron"></div>
+<div id="hud">
+<button id="bHorn"><svg viewBox="0 0 12 12" shape-rendering="crispEdges"><path fill="#e8b830" d="M1 5h2v2H1zM3 4h3v4H3zM6 3h2v6H6zM8 2h2v8H8z"/><path fill="#fff3c0" d="M10 1h1v10h-1z"/></svg></button>
+<button id="bDrum"><svg viewBox="0 0 12 12" shape-rendering="crispEdges"><path fill="#8a3b2a" d="M2 5h8v5H2z"/><path fill="#e8dcb8" d="M2 4h8v1H2zM2 10h8v1H2z"/><path fill="#5fae4a" d="M1 1h1v1H1zM2 2h1v1H2zM3 3h1v1H3zM10 1h1v1h-1zM9 2h1v1H9zM8 3h1v1H8z"/></svg></button>
+<button id="bFate"><svg viewBox="0 0 12 12" shape-rendering="crispEdges"><path fill="#e8dcb8" d="M2 2h8v8H2z"/><path fill="#17131c" d="M3 3h2v2H3zM7 7h2v2H7zM5 5h2v2H5z"/></svg></button>
+<button id="bMute"><svg viewBox="0 0 12 12" shape-rendering="crispEdges"><path fill="#e8dcb8" d="M1 4h3v4H1zM4 3h1v6H4zM5 2h1v8H5z"/><path id="mWave" fill="#7fd0e8" d="M8 4h1v4H8zM10 2h1v8h-1z"/></svg></button>
+</div>
+<script id="lofi">
+      "use strict";
+      /*
+       * Lo-fi music made live, with no audio files (the main script's "Music" section runs it).
+       * LOFI.song(seed, mood) writes a song "sheet" from a number; it is pure and tests/music.test.js checks it.
+       *   mood = { night: 0 (day) to 1 (deep night), rain: 0 to 1, thunder: true in a storm }; night means
+       *   minor keys, slower, darker. Rain plays a hiss, a low wash and drops on the window; thunder adds
+       *   distant rumbles and now and then a closer crack. Without rain the place still sounds: mood.sea
+       *   (a coastal city) brings slow waves, mood.wind (0 to 1) a rising and falling wind, and birds sing by
+       *   day, crickets on warm nights (mood.warm). mood.crowd (0 to 1) brings voices and traffic hum and
+       *   mood.trains a train passing now and then. mood.places === false leaves all of these out. They all
+       *   go through a muffled low-pass, like a lo-fi field recording.
+       * LOFI.score(sheet, nf) lists every voice call of a sheet, for the Android app's native engine.
+       * new LOFI.Player(ctx, destination, sheet, start, fadeIn, nf) plays one sheet through Web Audio; the caller
+       *   calls schedule(until) often, fadeOut(at, seconds) to leave, and dispose() once it is silent.
+       * nf switches on four ideas, each on its own ({drift, breathe, swell, phaser}, see drift(), breathe(),
+       *   swellAt and PH_HZ): they change how a sheet is played, never the sheet, and without them (nf left out
+       *   or all false) a song plays its plain score, which a test pins with a fingerprint.
+       * The first drum loop, its bass rhythm and the chord hits are TUNE.Pocket's JAM "Lo-fi" loop (lazy beat).
+       * Each song picks a band from BANDS, which says which Player voice plays the chords, the lead (one of
+       *   its leads, another one plays the solo section) and the bass, which drum kit plays the loop (KITS maps
+       *   each drum row to a voice), and how much echo the chords and leads get. The sheet keeps that choice in
+       *   band, voices, drums, hits and echo, so the Player only follows the sheet.
+       * Each song grows from a gene of three moves between scale degrees (sheet.motif). The moves walk the
+       *   melody inside a bar, the four chords of a section (sheet.chords), and B away from A (sheet.chordsB
+       *   starts on A's second chord), so the song has the same shape at every size. Each melody bar also
+       *   turns on where the last one ended. A chord colour (COLOURS), the tempo and the order of the
+       *   sections (FORMS) also come from the seed.
+       * Melodies: A and B come back as A2 and B2 with their first and third bars kept and a new second bar and
+       *   ending, and every song has a four-bar solo. Some songs add a ticking clock (CLICKS) under the drums.
+       * To add a band, add a row to BANDS and, if it needs a new sound, write that voice as a Player method
+       *   that takes (note, time, duration, velocity), or (time, velocity) for a drum, and plays into this.tone
+       *   (chords and leads, which get the echo) or this.bus (bass and drums). Give it at least two leads. Then
+       *   render a song with it and set its level so it sounds about as loud as the others; the test checks
+       *   that every band turns up and that every voice it names exists.
+       * Regional music: mood.region names a style (STYLES), which bends the song towards a place: its scale,
+       *   its chords, its tempo, its band, and parts of its own (a drone, a strummed chord, hand drums, grace
+       *   notes, an ostinato) that the sheet carries and the Player plays. regionOf(country, city) finds a
+       *   place's style in OWN_REGIONS and REGIONS. Without a style the dice are thrown exactly as before, so a
+       *   song is the same plain lo-fi song as ever. song(seed, { kaiju: true }) is the march for a monster.
+       * This script stands alone (it uses nothing from the main script), so it can be copied into another
+       * page as it is: everything it offers is the LOFI object it defines.
+       */
+      const LOFI = (() => {
+        // 16 steps per bar. Drums: x = hit. Bass: the interval above the chord root, . = rest.
+        const LOOPS = {
+          lazy: {
+            kick: "x......x..x.....",
+            snare: "....x.......x...",
+            hat: "x.x.x.x.x.x.x.x.",
+            open: "................",
+            bass: "0......7..0.....",
+          },
+          sway: {
+            kick: "x.....x...x.....",
+            snare: "....x.......x...",
+            hat: "x.x.x.x.x.x.x...",
+            open: "..............x.",
+            bass: "0.....0...7.....",
+          },
+          half: {
+            kick: "x.........x.....",
+            snare: "........x.......",
+            hat: "x...x...x...x...",
+            open: "..............x.",
+            bass: "0.........7.....",
+          },
+          shuffle: {
+            kick: "x.........x.....",
+            snare: "....x.......x...",
+            hat: "x...x.x.x...x.x.",
+            open: "................",
+            bass: "0.......7.....0.",
+            swing: 0.3,
+          },
+          // the loops below are only for regional styles (STYLES): no band in BANDS names them
+          walk: {
+            kick: "x.........x.....",
+            snare: "....x.......x...",
+            hat: "x...x.xxx...x.xx",
+            open: "................",
+            bass: "0...7...9...7...",
+            swing: 0.33,
+          },
+          four: {
+            kick: "x...x...x...x...",
+            snare: "....x.......x...",
+            hat: "................",
+            open: "..x...x...x...x.",
+            bass: "..0...0...0...0.",
+          },
+          tread: {
+            kick: "x...x...x...x...",
+            snare: "..............x.",
+            hat: "................",
+            open: "................",
+            bass: "0...0...0...0...",
+          },
+          march: {
+            kick: "x.......x.......",
+            snare: "....x.......x..x",
+            hat: "................",
+            open: "................",
+            bass: "0...0...0...7...",
+          },
+          // the muiñeira, for a sheet in 6/8 (meter): each group of four steps is one dotted beat, so the
+          // bombo falls on each 6/8 bar's first beat and the pandeireta on its second beat's third eighth
+          muineira: {
+            kick: "x.......x.......",
+            snare: "................",
+            hat: "......x.......x.",
+            open: "................",
+            bass: "0.......7.......",
+          },
+          // bossa nova: the thumb on beats one and three (pushed), the clave on the rim, a shaker
+          bossa: {
+            kick: "x.....x.x.....x.",
+            snare: "x..x..x...x..x..",
+            hat: "x.x.x.x.x.x.x.x.",
+            open: "................",
+            bass: "0.....7.0.....7.",
+          },
+          // country: the train beat on the brushes, a boom-chick bass from the root to the fifth
+          train: {
+            kick: "x.......x.......",
+            snare: "....x.x.....x.x.",
+            hat: "................",
+            open: "................",
+            bass: "0...7...0...7...",
+          },
+          // tango: four marcato beats over the habanera's bass
+          habanera: {
+            kick: "x...x...x...x...",
+            snare: "................",
+            hat: "................",
+            open: "................",
+            bass: "0..0.7..0..0.7..",
+          },
+          cumbia: {
+            kick: "x.......x.......",
+            snare: "....x.......x...",
+            hat: "x.x.x.x.x.x.x.x.",
+            open: "................",
+            bass: "0.....0.7.....7.",
+          },
+          // reggae's one drop: the kick and the rim together on the third beat only
+          onedrop: {
+            kick: "........x.......",
+            snare: "........x.......",
+            hat: "x.x.x.x.x.x.x.x.",
+            open: "................",
+            bass: "0.....0...7.0...",
+          },
+          afro: {
+            kick: "x.....x...x.....",
+            snare: "....x.......x...",
+            hat: "x.x.x.x.x.x.x.x.",
+            open: "..x...x...x...x.",
+            bass: "0..0..7...0.7...",
+          },
+        };
+        // which voice plays each drum row
+        const KITS = {
+          kit: { kick: "kick", snare: "snare", hat: "hat", open: "open" },
+          brush: { kick: "softKick", snare: "brush", hat: "ride", open: "ride" },
+          clicks: { kick: "tock", snare: "rim", hat: "shaker", open: "tick" },
+          snap: { kick: "kick", snare: "clap", hat: "shaker", open: "open" },
+          march: { kick: "bigdrum", snare: "tamboril", hat: "hat", open: "open" },
+          bossa: { kick: "softKick", snare: "rim", hat: "shaker", open: "ride" },
+          cumbia: { kick: "softKick", snare: "rim", hat: "scrape", open: "open" },
+          gaita: { kick: "bombo", snare: "tamboril", hat: "jingles", open: "jingles" },
+        };
+        // a clock that ticks over some songs (tick, tock on alternate beats)
+        const CLICKS = ["x...x...x...x...", "x...x...x...x..x", "x.......x.......", "..x...x...x...x."];
+        // Bands: the voices for chords, lead (one of leads), bass and drums (a KITS row), the drum loops
+        // they may use, the echo [send, length in steps, feedback], when the chords hit and a loudness trim.
+        const BANDS = {
+          dusty: {
+            chords: "keys",
+            leads: ["flute", "bell", "keys"],
+            bass: "bass",
+            drums: "kit",
+            loops: ["lazy", "sway", "half"],
+            echo: [0.12, 3, 0.3],
+            level: 0.95,
+          },
+          felt: {
+            chords: "felt",
+            leads: ["felt", "bell"],
+            bass: "bass",
+            drums: "kit",
+            loops: ["half", "sway"],
+            echo: [0.5, 3, 0.55],
+            level: 0.85,
+          },
+          jazz: {
+            chords: "keys",
+            leads: ["vibes", "horn"],
+            bass: "upright",
+            drums: "brush",
+            loops: ["shuffle", "half"],
+            echo: [0.12, 4, 0.25],
+            level: 1,
+          },
+          pad: {
+            chords: "pad",
+            leads: ["pluck", "flute"],
+            bass: "bass",
+            drums: "kit",
+            loops: ["lazy", "half"],
+            echo: [0.3, 4, 0.45],
+            hits: [0],
+            level: 1,
+          },
+          clicky: {
+            chords: "felt",
+            leads: ["bell", "pluck"],
+            bass: "upright",
+            drums: "clicks",
+            loops: ["lazy", "sway", "shuffle"],
+            echo: [0.25, 3, 0.4],
+            level: 1.05,
+          },
+          nylon: {
+            chords: "nylon",
+            leads: ["nylon", "flute"],
+            bass: "upright",
+            drums: "brush",
+            loops: ["sway", "half"],
+            echo: [0.2, 4, 0.35],
+            level: 1.1,
+          },
+          rhodes: {
+            chords: "rhodes",
+            leads: ["guitar", "whistle"],
+            bass: "sub",
+            drums: "kit",
+            loops: ["lazy", "sway"],
+            echo: [0.18, 3, 0.35],
+            level: 0.85,
+          },
+          kalimba: {
+            chords: "wurli",
+            leads: ["kalimba", "musicbox"],
+            bass: "bass",
+            drums: "snap",
+            loops: ["lazy", "half"],
+            echo: [0.3, 3, 0.45],
+            level: 1.15,
+          },
+          garden: {
+            chords: "rhodes",
+            leads: ["marimba", "kalimba"],
+            bass: "upright",
+            drums: "clicks",
+            loops: ["sway", "shuffle"],
+            echo: [0.2, 4, 0.35],
+            level: 1.1,
+          },
+          lullaby: {
+            chords: "felt",
+            leads: ["musicbox", "whistle"],
+            bass: "sub",
+            drums: "brush",
+            loops: ["half", "sway"],
+            echo: [0.45, 3, 0.5],
+            level: 0.8,
+          },
+        };
+        const MAJOR = [0, 2, 4, 5, 7, 9, 11],
+          MINOR = [0, 2, 3, 5, 7, 8, 10];
+        // The song's gene: three moves between scale degrees (fourths and fifths twice as likely as steps
+        // and thirds). The same three moves walk the melody inside a bar, the chords inside a section, and
+        // the B section away from A, so the song repeats its own shape at every size, like a fractal.
+        const MOVES = [3, -3, 3, -3, 1, -1, 2, -2];
+        const STARTS = [0, 0, 1, 3, 5]; // loops start on I, ii, IV or vi
+        // chord colours, as scale degrees stacked over the chord's root
+        const COLOURS = {
+          ninth: [2, 4, 6, 8], // rootless 3-5-7-9, the classic lo-fi chord
+          seventh: [0, 2, 4, 6],
+          add9: [0, 2, 4, 8],
+          sus: [0, 1, 4, 7], // 1-2-5-8
+          fourths: [0, 3, 6, 9], // stacked fourths
+        };
+        // melody rhythms for one bar: [step, length in steps]
+        const CELLS = [
+          [
+            [0, 3],
+            [4, 2],
+            [6, 8],
+          ],
+          [
+            [2, 2],
+            [4, 2],
+            [6, 6],
+            [12, 2],
+          ],
+          [
+            [0, 6],
+            [8, 2],
+            [10, 6],
+          ],
+          [
+            [0, 2],
+            [2, 2],
+            [4, 4],
+            [10, 4],
+          ],
+          [
+            [4, 4],
+            [8, 8],
+          ],
+          [
+            [0, 1],
+            [2, 1],
+            [4, 2],
+            [8, 3],
+            [12, 4],
+          ],
+          [
+            [3, 1],
+            [4, 4],
+            [10, 2],
+            [12, 4],
+          ],
+          [
+            [0, 2],
+            [3, 1],
+            [4, 2],
+            [8, 2],
+            [10, 2],
+            [12, 4],
+          ],
+          [
+            [6, 2],
+            [8, 8],
+          ],
+          [
+            [0, 4],
+            [6, 1],
+            [7, 1],
+            [8, 8],
+          ],
+        ];
+        CELLS.push(
+          [
+            [0, 2],
+            [2, 2],
+            [4, 2],
+            [6, 2],
+            [8, 8],
+          ],
+          [
+            [0, 8],
+            [10, 2],
+            [12, 4],
+          ],
+          [
+            [1, 2],
+            [3, 3],
+            [8, 2],
+            [11, 5],
+          ],
+          [
+            [0, 3],
+            [3, 3],
+            [6, 2],
+            [12, 4],
+          ],
+          [
+            [4, 2],
+            [6, 2],
+            [8, 2],
+            [10, 6],
+          ],
+          [
+            [0, 1],
+            [1, 1],
+            [2, 6],
+            [12, 4],
+          ],
+        );
+        const ENDS = [
+          [[0, 12]],
+          [
+            [0, 6],
+            [8, 8],
+          ],
+          [
+            [0, 4],
+            [4, 12],
+          ],
+          [
+            [0, 2],
+            [2, 2],
+            [4, 12],
+          ],
+          [
+            [2, 2],
+            [4, 4],
+            [8, 8],
+          ],
+        ];
+        // what plays in each section; mel* and solo name the melody (A2 and B2 are A and B coming back changed)
+        const SECTIONS = {
+          intro: "chords",
+          groove: "chords drums bass clicks",
+          A: "chords drums bass clicks melA",
+          B: "chords drums bass clicks melB",
+          A2: "chords drums bass clicks melA2",
+          B2: "chords drums bass clicks melB2",
+          solo: "chords drums bass clicks solo",
+          break: "chords bass clicks melA",
+          outro: "chords",
+        };
+        // the order of the sections after the intro; each has A2 and a solo in its first five
+        const FORMS = [
+          ["groove", "A", "B", "A2", "solo", "B2", "break", "A2", "B2"],
+          ["A", "A2", "B", "solo", "B2", "break", "A2", "B2", "groove"],
+          ["groove", "A", "B", "solo", "A2", "break", "B2", "A2", "B"],
+          ["A", "B", "solo", "A2", "B2", "groove", "A2", "break", "B2"],
+        ];
+        // Regional styles of lo-fi (the MUSIC tab's "Regional music"): each song's place picks one
+        // (REGIONS below), and song() bends the song towards it while keeping the seed's own melody and form.
+        // Every field is optional:
+        //   modes: the scales it may use (MODES, one picked by the seed), so a Celtic song is Dorian or Mixolydian
+        //   progs: the style's own progressions, [[A, B?], ...], one picked by the seed: A is four chords as
+        //     semitones over the key, instead of the gene's (flamenco's cadences), and B the B section's
+        //     (otherwise B starts on A's second chord)
+        //   bpm: [slowest, fastest]; colour: a COLOURS name or its own degrees; swing: the lilt (0.33 is a triplet, jig-like feel)
+        //   band: voices that replace the band's (chords, leads, bass, drums, loops, hits, echo, level)
+        //   leads: the melody voices (one picked by the seed; the band's lead then takes the solo)
+        //   grace: a quick cut above each long melody note, as pipers and whistlers play
+        //   drone: a voice that holds the key's root and fifth under the whole song
+        //   strum: [voice, 16 steps], strums the chord on each x (r is a rasgueado, three fast strokes, and a
+        //     is an arpeggio, the chord's notes one after another over two steps)
+        //   perc: { drum voice: 16 steps }, hand drums and small percussion that join the band's drums
+        //   ostinato: { voice, base (the note of the key's root), bars: four bars of [step, semitones, length] },
+        //     a figure that repeats under the groove (the kaiju's low strings, the techno riff)
+        //   form: the sections in order, instead of the seed's; key: a fixed key (the kaiju's motto needs one)
+        //   fanfare: brass calls on fixed notes, [bar of the section, step, notes, length]; the melody leaves
+        //     the first bar of each section to them; gong: a drum voice struck at each section's start
+        //   ostinato.double: a second voice that doubles the ostinato
+        // Voices are reused between styles (a "reed" is a dulzaina in La Rioja and a zurna in Turkey), so a new
+        // style is usually only a new row. When a style needs a new sound, add it as a Player voice and in lofi.c.
+        const MODES = {
+          dorian: { scale: [0, 2, 3, 5, 7, 9, 10], pent: [0, 3, 5, 7, 10], minor: true },
+          mixolydian: { scale: [0, 2, 4, 5, 7, 9, 10], pent: [0, 2, 4, 7, 9], minor: false },
+          aeolian: { scale: MINOR, pent: [0, 3, 5, 7, 10], minor: true },
+          // the melody of flamenco and of Hijaz: E F G# A B C D over E (its pentatonic leaves out the G#,
+          // since a flamenco cadence also passes through G)
+          phrygianDom: { scale: [0, 1, 4, 5, 7, 8, 10], pent: [0, 1, 5, 7, 8], minor: true },
+          hirajoshi: { scale: MINOR, pent: [0, 2, 3, 7, 8], minor: true },
+          phrygian: { scale: [0, 1, 3, 5, 7, 8, 10], pent: [0, 1, 3, 7, 8], minor: true },
+          insen: { scale: [0, 1, 3, 5, 7, 8, 10], pent: [0, 1, 5, 7, 10], minor: true },
+          major: { scale: MAJOR, pent: [0, 2, 4, 7, 9], minor: false },
+          // Persian dastgahs, without their quarter tones: Shur (its second is a little flat, here a half step)
+          shur: { scale: [0, 1, 3, 5, 7, 8, 10], pent: [0, 1, 3, 5, 7], minor: true },
+          // fado moves between minor and major over the same root, so its melody leaves out the third and the
+          // chords bring it (prog and progB)
+          fado: { scale: MINOR, pent: [0, 2, 5, 7], minor: true },
+          // harmonic minor, for a major V in a minor key (tango, the Balkans)
+          harmonic: { scale: [0, 2, 3, 5, 7, 8, 11], pent: [0, 2, 3, 7, 8], minor: true },
+        };
+        const celtic = {
+          modes: ["dorian", "mixolydian", "dorian", "aeolian"],
+          leads: ["gaita", "fife"], // a recorded bagpipe, or a tin whistle
+          grace: true,
+          drone: "drone",
+          perc: { frame: "x.....x.x.....x." }, // the bodhrán
+          swing: 0.33,
+        };
+        // regional leads that are too bright in the melody's usual range (G4 to D6), so they play it an octave down
+        const LOW_LEADS = [
+          "pipes",
+          "fife",
+          "bowed",
+          "steel",
+          "guitarra",
+          "reed",
+          "accordion",
+          "vox",
+          "shaku",
+          "grand",
+        ];
+        const STYLES = {
+          // Dungeon Town's own rows: a town tune by day and a slow dungeon dirge
+          medieval: { modes: ["dorian", "mixolydian", "dorian"], leads: ["fife"], grace: true, drone: "drone", perc: { frame: "x.....x.x.....x." }, swing: 0, bpm: [66, 78] },
+          dungeon: { modes: ["aeolian", "phrygian", "aeolian"], leads: ["fife"], drone: "drone", swing: 0, bpm: [44, 54] },
+          celtic,
+          // a Galician gaita band playing a muiñeira: the gaita (pipes, cuts and the drone) in a major key
+          // or Mixolydian, the bombo on the strong beats and the tamboril with a flam (f) on the off-beats and
+          // a roll (r) into each section, all in a real 6/8 (meter) instead of the Celtic swing
+          galicia: {
+            modes: ["mixolydian", "major", "major"],
+            leads: ["gaita"],
+            grace: true,
+            drone: "drone",
+            meter: "6/8",
+            // after "O son do ar" (the feel, not the tune): a slow air, a harp's arpeggios under the gaita, the
+            // bombo on the strong beats and only a soft tamboril, no rolls
+            bpm: [56, 64],
+            swing: 0,
+            strum: ["zither", "a.......a......."],
+            band: { drums: "gaita", loops: ["muineira"], echo: [0.35, 4, 0.5], level: 1.1 },
+            perc: { tamboril: "........x......." },
+          },
+          // the Andalusian cadence (Am G F E over E) strummed on a guitar, with palmas and castanets
+          flamenco: {
+            // Andalusian cadences over E (phrygian dominant): Am G F E, F E Am E, Am Dm F E and C G F E (one picked by the seed, so a new variation changes the chords too)
+            progs: [
+              [
+                [
+                  [5, 8, 12],
+                  [3, 7, 10],
+                  [1, 5, 8],
+                  [0, 4, 7],
+                ],
+              ],
+              [
+                [
+                  [1, 5, 8],
+                  [0, 4, 7],
+                  [5, 8, 12],
+                  [0, 4, 7],
+                ],
+                [
+                  [5, 8, 12],
+                  [3, 7, 10],
+                  [1, 5, 8],
+                  [0, 4, 7],
+                ],
+              ],
+              [
+                [
+                  [5, 8, 12],
+                  [10, 13, 17],
+                  [1, 5, 8],
+                  [0, 4, 7],
+                ],
+                [
+                  [1, 5, 8],
+                  [0, 4, 7],
+                  [1, 5, 8],
+                  [0, 4, 7],
+                ],
+              ],
+              [
+                [
+                  [8, 12, 15],
+                  [3, 7, 10],
+                  [1, 5, 8],
+                  [0, 4, 7],
+                ],
+                [
+                  [5, 8, 12],
+                  [3, 7, 10],
+                  [1, 5, 8],
+                  [0, 4, 7],
+                ],
+              ],
+            ],
+            modes: ["phrygianDom"],
+            strum: ["spanish", "r.....x.x.....x."],
+            perc: { palmas: "....x.......x...", castanets: "x.........x....." },
+          },
+          rioja: { leads: ["reed"], perc: { tamboril: "x.....x.....x..." } }, // the dulzaina and the tamboril
+          // New Orleans: a soul-jazz trio, swung, with ninth chords, a walking upright and a muted trumpet or sax
+          soul: {
+            colour: "ninth",
+            bpm: [62, 80],
+            band: {
+              chords: "rhodes",
+              leads: ["horn", "sax"],
+              bass: "upright",
+              drums: "brush",
+              loops: ["walk"],
+              echo: [0.15, 3, 0.3],
+              level: 0.95,
+            },
+          },
+          // Berlin and Detroit: four on the floor, off-beat hats and a riff whose filter opens and closes
+          // after Kraftwerk's "Computer Love" (the sound, not the tune): minor seventh chords on a warm pad, a
+          // sequencer's steady eighths up and down the chord, a clean bell-like synth on a slow tune
+          techno: {
+            modes: ["aeolian"],
+            colour: "seventh",
+            bpm: [84, 90],
+            band: {
+              chords: "pad",
+              leads: ["pluck", "bell"],
+              bass: "sub",
+              drums: "snap",
+              loops: ["four"],
+              hits: [0],
+              echo: [0.3, 3, 0.45],
+              level: 0.65,
+            },
+            ostinato: {
+              voice: "riff",
+              follow: true, // x is a note of the bar's chord (0 its lowest), an octave down
+              bars: Array(4).fill([
+                [0, 0, 1],
+                [2, 1, 1],
+                [4, 2, 1],
+                [6, 3, 1],
+                [8, 4, 1],
+                [10, 3, 1],
+                [12, 2, 1],
+                [14, 1, 1],
+              ]),
+            },
+          },
+          // Japan: in and hirajōshi scales, a shakuhachi over koto plucks, and a taiko now and then
+          japan: {
+            modes: ["hirajoshi", "insen"],
+            leads: ["shaku"],
+            strum: ["zither", "x.....x...x....."],
+            perc: { taiko: "x..........x...." },
+          },
+          india: {
+            modes: ["mixolydian", "dorian"], // Khamaj and Kafi
+            leads: ["shaku"], // the bansuri
+            drone: "drone", // the tanpura
+            strum: ["zither", "x.......x..x...."],
+            perc: { goblet: "x.....x...x....." }, // the tabla
+          },
+          china: { leads: ["bowed"], strum: ["zither", "x...x...x...x..."] }, // the erhu and the guzheng
+          hijaz: {
+            // over D hijaz: D Eb Cm D, D Gm Eb D, D Gm Cm D and Gm Cm Eb D (one picked by the seed, so a new variation changes the chords too)
+            progs: [
+              [
+                [
+                  [0, 4, 7],
+                  [1, 5, 8],
+                  [10, 13, 17],
+                  [0, 4, 7],
+                ],
+              ],
+              [
+                [
+                  [0, 4, 7],
+                  [5, 8, 12],
+                  [1, 5, 8],
+                  [0, 4, 7],
+                ],
+                [
+                  [10, 13, 17],
+                  [1, 5, 8],
+                  [10, 13, 17],
+                  [0, 4, 7],
+                ],
+              ],
+              [
+                [
+                  [0, 4, 7],
+                  [5, 8, 12],
+                  [10, 13, 17],
+                  [0, 4, 7],
+                ],
+                [
+                  [1, 5, 8],
+                  [0, 4, 7],
+                  [1, 5, 8],
+                  [0, 4, 7],
+                ],
+              ],
+              [
+                [
+                  [5, 8, 12],
+                  [10, 13, 17],
+                  [1, 5, 8],
+                  [0, 4, 7],
+                ],
+                [
+                  [0, 4, 7],
+                  [1, 5, 8],
+                  [0, 4, 7],
+                  [0, 4, 7],
+                ],
+              ],
+            ],
+            modes: ["phrygianDom"],
+            leads: ["reed", "shaku"], // the zurna or mizmar, and the ney
+            strum: ["plucked", "x..x..x...x....."], // the oud or the saz
+            perc: { goblet: "x.....x.x......." }, // the darbuka
+          },
+          // forró, Brazil's north-east: an accordion in Mixolydian over the zabumba and a triangle
+          forro: {
+            modes: ["mixolydian"],
+            leads: ["accordion"],
+            bpm: [70, 82],
+            perc: { frame: "x......x.x......", triangle: "..x...x...x...x." },
+          },
+          // bossa nova: a nylon guitar on the bossa rhythm, ninth chords, brushes and a shaker, and a soft piano
+          // low on the tune (the flute and the wordless voice sounded like toys)
+          // after "Águas de Março" (the technique, not the song): the batida's strokes are short, so one never
+          // rings into the next or into the next chord, and the shapes stay close, under the tune, moving a
+          // finger or two by a step from chord to chord
+          bossa: {
+            colour: "ninth",
+            close: true,
+            hold: 2.5,
+            bpm: [64, 74],
+            swing: 0.08,
+            band: {
+              chords: "spanish",
+              leads: ["grand", "rhodes"], // a soft, low piano ringing over the guitar; a Rhodes on the solo
+              bass: "upright",
+              drums: "bossa",
+              loops: ["bossa"],
+              hits: [0, 3, 6, 10, 13],
+              echo: [0.2, 3, 0.3],
+              level: 0.8,
+            },
+          },
+          // fado: slow, a minor A and a major B on the same root, a classical guitar's arpeggios, and the
+          // Portuguese guitar's tremolo or a wordless voice on the tune
+          fado: {
+            // Am Dm E Am with an A major B section, Am Dm Am E, Am G F E and Am C Dm E (one picked by the seed, so a new variation changes the chords too)
+            progs: [
+              [
+                [
+                  [0, 3, 7],
+                  [5, 8, 12],
+                  [7, 11, 14],
+                  [0, 3, 7],
+                ],
+                [
+                  [0, 4, 7],
+                  [5, 9, 12],
+                  [7, 11, 14],
+                  [0, 4, 7],
+                ],
+              ],
+              [
+                [
+                  [0, 3, 7],
+                  [5, 8, 12],
+                  [0, 3, 7],
+                  [7, 11, 14],
+                ],
+                [
+                  [0, 4, 7],
+                  [5, 9, 12],
+                  [0, 4, 7],
+                  [7, 11, 14],
+                ],
+              ],
+              [
+                [
+                  [0, 3, 7],
+                  [10, 14, 17],
+                  [8, 12, 15],
+                  [7, 11, 14],
+                ],
+                [
+                  [0, 4, 7],
+                  [9, 13, 16],
+                  [2, 6, 9],
+                  [7, 11, 14],
+                ],
+              ],
+              [
+                [
+                  [0, 3, 7],
+                  [3, 7, 10],
+                  [5, 8, 12],
+                  [7, 11, 14],
+                ],
+                [
+                  [0, 4, 7],
+                  [5, 9, 12],
+                  [2, 5, 9],
+                  [7, 11, 14],
+                ],
+              ],
+            ],
+            modes: ["fado"],
+            bpm: [56, 62],
+            swing: 0.1,
+            leads: ["guitarra", "vox"],
+            strum: ["spanish", "a.......a......."],
+            band: {
+              chords: "spanish",
+              leads: ["guitarra", "vox"],
+              bass: "upright",
+              drums: "brush",
+              loops: ["half"],
+              hits: [0],
+              echo: [0.3, 3, 0.4],
+              level: 1.35,
+            },
+          },
+          // lo-fi country (Texas, Nashville): I, IV and V with the odd ii, a pedal steel or a fiddle, a twangy
+          // guitar on the backbeat, the train beat on brushes
+          country: {
+            // I IV V I, I V vi IV, I vi IV V and I IV I V (one picked by the seed, so a new variation changes the chords too)
+            progs: [
+              [
+                [
+                  [0, 4, 7],
+                  [5, 9, 12],
+                  [7, 11, 14],
+                  [0, 4, 7],
+                ],
+                [
+                  [5, 9, 12],
+                  [0, 4, 7],
+                  [2, 5, 9],
+                  [7, 11, 14],
+                ],
+              ],
+              [
+                [
+                  [0, 4, 7],
+                  [7, 11, 14],
+                  [9, 12, 16],
+                  [5, 9, 12],
+                ],
+                [
+                  [5, 9, 12],
+                  [0, 4, 7],
+                  [5, 9, 12],
+                  [7, 11, 14],
+                ],
+              ],
+              [
+                [
+                  [0, 4, 7],
+                  [9, 12, 16],
+                  [5, 9, 12],
+                  [7, 11, 14],
+                ],
+                [
+                  [5, 9, 12],
+                  [7, 11, 14],
+                  [0, 4, 7],
+                  [0, 4, 7],
+                ],
+              ],
+              [
+                [
+                  [0, 4, 7],
+                  [5, 9, 12],
+                  [0, 4, 7],
+                  [7, 11, 14],
+                ],
+                [
+                  [9, 12, 16],
+                  [5, 9, 12],
+                  [2, 5, 9],
+                  [7, 11, 14],
+                ],
+              ],
+            ],
+            modes: ["major"],
+            // after the Eagles' "Lyin' Eyes" (the feel, not the song): an easy country-rock ballad, a steady
+            // acoustic strum, a soft piano under it, a clean pedal steel on the tune, brushes on two and four
+            bpm: [62, 72],
+            swing: 0.1,
+            leads: ["steel"],
+            strum: ["spanish", "x...x.x.x...x.x."],
+            band: {
+              chords: "felt",
+              leads: ["steel"],
+              bass: "upright",
+              drums: "brush",
+              loops: ["lazy"],
+              hits: [0],
+              echo: [0.2, 3, 0.3],
+              level: 1,
+            },
+          },
+          // Persian: Shur or Homayoun, the kamancheh or the tar on the tune, santur rolls, the tombak
+          persian: {
+            modes: ["shur", "phrygianDom"],
+            leads: ["bowed", "plucked"],
+            drone: "drone",
+            strum: ["santur", "x..x..x...x....."],
+            perc: { goblet: "x..x..x...x....." },
+            bpm: [56, 70],
+            swing: 0.15,
+          },
+          // the steppe (Kazakhstan to Mongolia): a dombra's galloping strum, a throat-sung drone, a fiddle
+          steppe: {
+            modes: ["aeolian", "mixolydian"],
+            leads: ["bowed"],
+            drone: "throat",
+            strum: ["plucked", "x..x..x.x..x..x."],
+            perc: { frame: "x.......x......." },
+            bpm: [70, 82],
+            band: { level: 0.8 },
+          },
+          // tango: a bandoneón (or a violin on the solo) over marcato chords and the habanera bass
+          tango: {
+            // i iv V i with a VI B section, i VII VI V, i iv i V and iv i V i (one picked by the seed, so a new variation changes the chords too)
+            progs: [
+              [
+                [
+                  [0, 3, 7],
+                  [5, 8, 12],
+                  [7, 11, 14],
+                  [0, 3, 7],
+                ],
+                [
+                  [8, 12, 15],
+                  [5, 8, 12],
+                  [7, 11, 14],
+                  [0, 3, 7],
+                ],
+              ],
+              [
+                [
+                  [0, 3, 7],
+                  [10, 14, 17],
+                  [8, 12, 15],
+                  [7, 11, 14],
+                ],
+                [
+                  [5, 8, 12],
+                  [0, 3, 7],
+                  [7, 11, 14],
+                  [0, 3, 7],
+                ],
+              ],
+              [
+                [
+                  [0, 3, 7],
+                  [5, 8, 12],
+                  [0, 3, 7],
+                  [7, 11, 14],
+                ],
+                [
+                  [8, 12, 15],
+                  [10, 14, 17],
+                  [7, 11, 14],
+                  [7, 11, 14],
+                ],
+              ],
+              [
+                [
+                  [5, 8, 12],
+                  [0, 3, 7],
+                  [7, 11, 14],
+                  [0, 3, 7],
+                ],
+                [
+                  [8, 12, 15],
+                  [5, 8, 12],
+                  [0, 3, 7],
+                  [7, 11, 14],
+                ],
+              ],
+            ],
+            modes: ["harmonic"],
+            bpm: [56, 66],
+            swing: 0,
+            band: {
+              chords: "keys",
+              leads: ["accordion", "bowed"],
+              bass: "upright",
+              drums: "brush",
+              loops: ["habanera"],
+              hits: [0, 4, 8, 12],
+              echo: [0.15, 3, 0.3],
+              level: 0.85,
+            },
+          },
+          // cumbia: an accordion, the guacharaca's scrape, the tambor alegre
+          cumbia: {
+            leads: ["accordion"],
+            bpm: [72, 82],
+            band: { bass: "bass", drums: "cumbia", loops: ["cumbia"] },
+            perc: { goblet: "..x...x...x...x." },
+          },
+          // the Andes: a quena, a charango's huayno strum, the bombo
+          andean: {
+            modes: ["aeolian"],
+            leads: ["shaku"],
+            strum: ["plucked", "x..x..x.x..x...."],
+            perc: { frame: "x.......x..x...." },
+            bpm: [66, 80],
+            band: { level: 0.85 },
+          },
+          // reggae: the one drop, a skank on the off-beats, a melodica or a trumpet
+          reggae: {
+            bpm: [60, 70],
+            swing: 0.1,
+            strum: ["twang", "..x...x...x...x."],
+            band: {
+              chords: "wurli",
+              leads: ["accordion", "horn"],
+              bass: "sub",
+              drums: "kit",
+              loops: ["onedrop"],
+              hits: [],
+              echo: [0.3, 3, 0.45],
+              level: 1,
+            },
+          },
+          // afrobeat: interlocking guitar, a sax or a trumpet, shekere and the busy hats
+          afrobeat: {
+            modes: ["dorian"],
+            bpm: [74, 82],
+            strum: ["twang", "x....x....x..x.."],
+            perc: { goblet: "x..x.x....x..x.." },
+            band: {
+              chords: "rhodes",
+              leads: ["sax", "horn"],
+              bass: "bass",
+              drums: "kit",
+              loops: ["afro"],
+              echo: [0.15, 3, 0.3],
+              level: 0.75,
+            },
+          },
+          // the Balkans: a clarinet or zurna, an accordion, the tapan on a limping 3+3+2
+          balkan: {
+            modes: ["phrygianDom", "harmonic"],
+            leads: ["reed", "accordion"],
+            strum: ["plucked", "x.....x.x......."],
+            perc: { goblet: "x.....x.x......." },
+            bpm: [70, 82],
+            band: { level: 0.85 },
+          },
+          // Slavic folk: a bayan or a fiddle, and a balalaika's tremolo
+          slavic: {
+            modes: ["aeolian", "harmonic"],
+            leads: ["accordion", "bowed"],
+            strum: ["guitarra", "x...x...x...x..."],
+            bpm: [64, 80],
+          },
+          mexico: { leads: ["horn"], strum: ["plucked", "x....x....x....."] },
+          westAfrica: {
+            leads: ["marimba"], // the balafon
+            strum: ["zither", "x..x....x..x...."], // the kora
+            perc: { goblet: "x....x....x....." }, // the djembe or the talking drum
+          },
+          // The kaiju song (LOFI.song(seed, { kaiju: true })), in the manner of a 1950s-60s monster-film score:
+          // a slow, relentless tread in D minor or Phrygian, a stubborn low ostinato in the strings doubled by
+          // a piano, blunt brass in fifths and octaves, timpani and a big drum on every beat like footsteps,
+          // and a gong at each section. Everything here was written for this page and imitates no film: the
+          // motto (D, then the A a fifth above, then the A flat a half step under it, in fifths and octaves)
+          // opens every section on the same notes, so it is Clockscapes' own monster signature, and a stab of
+          // a minor second over a tritone ends each phrase. The tune and the chords between come from the seed.
+          kaiju: {
+            modes: ["aeolian", "phrygian"],
+            key: 2, // D, so the motto's notes never change
+            colour: [0, 4, 7], // root, fifth and octave: bare and heavy
+            bpm: [60, 68],
+            swing: 0,
+            band: {
+              chords: "brass",
+              leads: ["brass", "brass"],
+              bass: "timpani",
+              drums: "march",
+              loops: ["tread"],
+              hits: [0],
+              echo: [0.15, 4, 0.3],
+              level: 0.43,
+            },
+            ostinato: {
+              voice: "strings",
+              double: "piano",
+              base: 36,
+              bars: [0, 0, 0, 1].map((last) => [
+                [0, 0, 2],
+                [3, 0, 1],
+                [4, 1, 2],
+                [6, 0, 2],
+                [8, 0, 2],
+                [11, 0, 1],
+                last ? [12, 1, 2] : [12, -2, 2],
+                last ? [14, 0, 2] : [14, -5, 2],
+              ]),
+            },
+            // [bar of the section, step, notes, length in steps], played by the brass (an octave lower than
+            // written); the melody leaves the motto's bar to it
+            fanfare: [
+              [0, 0, [50, 57, 62], 6],
+              [0, 6, [57, 64, 69], 2],
+              [0, 8, [56, 63, 68], 8],
+              [3, 12, [50, 51, 56], 2],
+            ],
+            gong: "gong",
+            form: ["A", "B", "A2", "B2"],
+          },
+        };
+        // Where each style plays. OWN_REGIONS are picked by hand and checked first. REGIONS is written by
+        // tools/lofi-regions.py from the research table of regional music (regional-instruments.tsv), whose
+        // "lo-fi style" column it maps to the styles built here; a style not built yet maps to "", the plain
+        // lo-fi. A key is a country code (CITY_ATLAS's) or a region of a country with its city ids, and a
+        // region's row comes before its country's. A place in none of them plays the plain lo-fi.
+        const OWN_REGIONS = {
+          "ES/Galicia": [
+            "galicia",
+            "vigo-es a-coruna-es santiago-de-compostela-es ourense-es lugo-es pontevedra-es",
+          ],
+          "ES/La Rioja": ["rioja", "logrono-es"],
+          "ES/Murcia": ["flamenco", "murcia-es cartagena-es"],
+          "ES/Valencia": ["", "valencia-es alicante-es castellon-es"], // the plain lo-fi, all three alike
+        };
+        // prettier-ignore
+        const REGIONS = {
+          "US/New Orleans (city)": ["soul", "new-orleans-us"],
+          "US/Detroit (city)": ["techno", "detroit-us"],
+          "US/Nashville (city)": ["country", "nashville-us"],
+          "US/Chicago (city)": ["soul", "chicago-us"],
+          "US/Philadelphia (city)": ["soul", "philadelphia-us"],
+          "US/Austin (city)": ["country", "austin-us san-antonio-us"],
+          "DE/Berlin (city)": ["techno", "berlin-de"],
+          "DE/Hamburg (city)": ["", "hamburg-de"],
+          "JM/Kingston (city)": ["reggae", "kingston-jm"],
+          "CU/Havana (city)": ["", "havana-cu santiago-de-cuba-cu"],
+          "BR/Salvador (city)": ["afrobeat", "salvador-br"],
+          "BR/Rio de Janeiro (city)": ["bossa", "rio-de-janeiro-br"],
+          "BR/Recife (city)": ["forro", "recife-br"],
+          "AR/Buenos Aires (city)": ["tango", "buenos-aires-ar"],
+          "UY/Montevideo (city)": ["tango", "montevideo-uy"],
+          "PT/Lisbon (city)": ["fado", "lisbon-pt"],
+          "ES/Seville (city)": ["flamenco", "seville-es"],
+          "ES/Granada (city)": ["flamenco", "granada-es"],
+          "ES/Cordoba (city)": ["flamenco", "cordoba-es"],
+          "AT/Vienna (city)": ["", "vienna-at"],
+          "IN/Mumbai (city)": ["india", "mumbai-in"],
+          "IN/Varanasi (city)": ["india", "varanasi-in"],
+          "IN/Kolkata (city)": ["india", "kolkata-in"],
+          "KR/Seoul (city)": ["", "seoul-kr"],
+          "JP/Tokyo (city)": ["japan", "tokyo-jp"],
+          "NG/Lagos (city)": ["afrobeat", "lagos-ng"],
+          "CD/Kinshasa (city)": ["afrobeat", "kinshasa-cd"],
+          "GH/Accra (city)": ["westAfrica", "accra-gh kumasi-gh"],
+          "ML/Bamako (city)": ["westAfrica", "bamako-ml"],
+          "SN/Dakar (city)": ["afrobeat", "dakar-sn"],
+          "EG/Cairo (city)": ["hijaz", "cairo-eg"],
+          "MA/Marrakesh (city)": ["westAfrica", "marrakesh-ma"],
+          "IL/Tel Aviv (city)": ["", "tel-aviv-il jerusalem-il"],
+          "UA/Kyiv (city)": ["", "kyiv-ua"],
+          "HU/Budapest (city)": ["balkan", "budapest-hu"],
+          "RS/Belgrade (city)": ["balkan", "belgrade-rs"],
+          "BG/Sofia (city)": ["balkan", "sofia-bg"],
+          "GR/Athens (city)": ["balkan", "athens-gr"],
+          "CZ/Prague (city)": ["", "prague-cz"],
+          "IE/Dublin (city)": ["celtic", "dublin-ie galway-ie"],
+          "GB/Edinburgh and Glasgow (city)": ["celtic", "edinburgh-gb glasgow-gb"],
+          "GB/London (city)": ["", "london-gb"],
+          "FR/Paris (city)": ["", "paris-fr"],
+          "IT/Naples (city)": ["", "naples-it"],
+          "MX/Mexico City (city)": ["mexico", "mexico-city-mx guadalajara-mx"],
+          "CO/Cartagena and Medellin (city)": ["cumbia", "cartagena-co barranquilla-co medellin-co"],
+          "TT/Port of Spain (city)": ["", "port-of-spain-tt"],
+          "PR/San Juan (city)": ["", "san-juan-pr"],
+          "HT/Port-au-Prince (city)": ["", "port-au-prince-ht"],
+          "ES/Santiago de Compostela and Oviedo (city)": ["celtic", "santiago-de-compostela-es oviedo-es"],
+          "CN/Xinjiang (Uyghur)": ["hijaz", "urumqi-cn"],
+          "CN/Tibet": ["", "lhasa-cn"],
+          "CN/Inner Mongolia": ["", "hohhot-cn baotou-cn ordos-cn bayan-nur-cn"],
+          "CN/Guangdong (Cantonese)": ["china", "guangzhou-cn shenzhen-cn dongguan-cn zhongshan-cn zhuhai-cn jiangmen-cn shantou-cn"],
+          "CN/Sichuan / Chongqing": ["china", "chengdu-cn chongqing-cn"],
+          "IT/Naples and Campania": ["", "naples-it caserta-it salerno-it benevento-it avellino-it"],
+          "IT/Sardinia": ["", "cagliari-it sassari-it nuoro-it oristano-it carbonia-it"],
+          "IT/Sicily": ["", "palermo-it catania-it messina-it syracuse-it ragusa-it trapani-it agrigento-it caltanissetta-it enna-it"],
+          "IT/Puglia (pizzica)": ["", "bari-it taranto-it lecce-it brindisi-it foggia-it barletta-it andria-it"],
+          "IT/South Tyrol (Alpine)": ["", "bolzano-it trento-it"],
+          "FR/Brittany": ["celtic", "rennes-fr quimper-fr vannes-fr saint-brieuc-fr nantes-fr"],
+          "FR/Corsica": ["", "ajaccio-fr bastia-fr"],
+          "FR/Provence": ["", "marseille-fr nice-fr avignon-fr toulon-fr nimes-fr"],
+          "FR/Auvergne": ["", "clermont-ferrand-fr aurillac-fr le-puy-en-velay-fr"],
+          "RU/Siberia (Tuva)": ["slavic", "kyzyl-ru"],
+          "RU/Yakutia (Sakha)": ["slavic", "yakutsk-ru"],
+          "RU/Caucasus": ["balkan", "makhachkala-ru grozny-ru vladikavkaz-ru nalchik-ru cherkessk-ru maykop-ru"],
+          "RU/Tatarstan and Bashkortostan": ["slavic", "kazan-ru ufa-ru"],
+          "TH/Isan (northeast)": ["", "nakhon-ratchasima-th ubon-ratchathani-th udon-thani-th khon-kaen-th sakon-nakhon-th nong-khai-th kalasin-th maha-sarakham-th roi-et-th surin-th si-sa-ket-th buri-ram-th chaiyaphum-th loei-th mukdahan-th yasothon-th amnat-charoen-th nakhon-phanom-th nong-bua-lamphu-th"],
+          "TH/North (Lanna)": ["", "chiang-mai-th chiang-rai-th lampang-th phrae-th nan-th phayao-th"],
+          "US/Appalachia and the South": ["country", "nashville-us frankfort-us richmond-us raleigh-us charleston-us"],
+          "US/New Orleans and Louisiana": ["soul", "new-orleans-us baton-rouge-us"],
+          "US/Hawaii": ["", "honolulu-us"],
+          "US/Texas / Tejano": ["country", "austin-us san-antonio-us houston-us dallas-us fort-worth-us"],
+          "US/Mississippi Delta": ["soul", "jackson-us little-rock-us montgomery-us"],
+          "US/Southwest (Native American)": ["", "santa-fe-us phoenix-us"],
+          "IN/North (Hindustani)": ["india", "new-delhi-in lucknow-in varanasi-in agra-in kanpur-in patna-in prayagraj-in meerut-in dehradun-in bhopal-in"],
+          "IN/Punjab": ["india", "amritsar-in ludhiana-in chandigarh-in"],
+          "IN/South (Carnatic)": ["india", "chennai-in bengaluru-in hyderabad-in madurai-in coimbatore-in tirunelveli-in tiruchirappalli-in puducherry-in kallakurichi-in vijayawada-in visakhapatnam-in rasapudipalem-in"],
+          "IN/Kerala": ["india", "thiruvananthapuram-in"],
+          "IN/Bengal": ["india", "kolkata-in"],
+          "IN/Rajasthan": ["india", "jaipur-in jodhpur-in kota-in"],
+          "IN/Gujarat": ["india", "ahmedabad-in surat-in vadodara-in rajkot-in"],
+          "IN/Kashmir": ["india", "srinagar-in jammu-in kargil-in"],
+          "IN/Maharashtra": ["india", "mumbai-in pune-in nagpur-in nashik-in aurangabad-in kalyan-in virar-in dombivali-in"],
+          "ES/Andalusia": ["flamenco", "seville-es malaga-es cordoba-es granada-es almeria-es huelva-es cadiz-es jaen-es"],
+          "ES/Galicia": ["celtic", "a-coruna-es ourense-es santiago-de-compostela-es lugo-es pontevedra-es"],
+          "ES/Asturias": ["celtic", "oviedo-es"],
+          "ES/Cantabria": ["celtic", "santander-es"],
+          "ES/La Rioja and Castile": ["", "logrono-es valladolid-es burgos-es salamanca-es segovia-es soria-es leon-es zamora-es palencia-es avila-es"],
+          "ES/Catalonia": ["", "barcelona-es tarragona-es lleida-es girona-es"],
+          "ES/Basque Country and Navarre": ["", "bilbao-es vitoria-gasteiz-es san-sebastian-es pamplona-es"],
+          "ES/Valencia and Murcia": ["", "valencia-es alicante-es castellon-es murcia-es"],
+          "ES/Canary Islands": ["", "las-palmas-es santa-cruz-de-tenerife-es"],
+          "ES/Aragon": ["", "zaragoza-es huesca-es teruel-es"],
+          "ES/Balearic Islands": ["", "palma-es"],
+          "VN/Hue (central)": ["", "hue-vn da-nang-vn"],
+          "VN/Central Highlands": ["", "buon-ma-thuot-vn pleiku-vn da-lat-vn gia-nghia-vn"],
+          "VN/Mekong Delta (South)": ["", "can-tho-vn my-tho-vn long-xuyen-vn ca-mau-vn soc-trang-vn ben-tre-vn"],
+          "DZ/Kabylie": ["hijaz", "tizi-ouzou-dz bejaia-dz bouira-dz boumerdas-dz"],
+          "DZ/Sahara (Tuareg)": ["westAfrica", "tamanghasset-dz adrar-dz tindouf-dz el-menia-dz timimoun-dz"],
+          "DZ/South-west (Gnawa and Bechar)": ["westAfrica", "bechar-dz"],
+          "JP/Kansai and Kyoto": ["japan", "kyoto-jp osaka-jp nara-jp kobe-jp wakayama-jp"],
+          "JP/Tohoku (Tsugaru)": ["japan", "aomori-jp akita-jp morioka-jp yamagata-jp fukushima-jp sendai-jp"],
+          "JP/Okinawa": ["japan", "naha-jp"],
+          "JP/Hokkaido (Ainu)": ["japan", "sapporo-jp"],
+          "JP/Tokyo (Edo matsuri)": ["japan", "tokyo-jp yokohama-jp saitama-jp chiba-jp"],
+          "KE/Luo (Lake Victoria)": ["afrobeat", "kisumu-ke homa-bay-ke migori-ke siaya-ke busia-ke"],
+          "KE/Swahili coast": ["hijaz", "mombasa-ke lamu-ke kilifi-ke"],
+          "ID/Java": ["", "surabaya-id semarang-id yogyakarta-id jepara-id"],
+          "ID/Bali": ["", "denpasar-id mataram-id"],
+          "ID/Sunda (West Java)": ["", "bandung-id bogor-id depok-id serang-id"],
+          "ID/Sumatra (Minangkabau)": ["", "padang-id"],
+          "ID/Jakarta (Betawi)": ["", "jakarta-id"],
+          "NG/Yoruba": ["afrobeat", "lagos-ng ibadan-ng abeokuta-ng akure-ng osogbo-ng ado-ekiti-ng ilorin-ng"],
+          "NG/Hausa (North)": ["afrobeat", "kano-ng kaduna-ng sokoto-ng katsina-ng bauchi-ng maiduguri-ng gombe-ng minna-ng jos-ng birnin-kebbi-ng gusau-ng dutse-ng damaturu-ng yola-ng"],
+          "NG/Igbo (Southeast)": ["afrobeat", "onitsha-ng enugu-ng owerri-ng aba-ng awka-ng umuahia-ng abakaliki-ng"],
+          "MX/Jalisco (Mariachi)": ["mexico", "guadalajara-mx tepic-mx colima-mx morelia-mx"],
+          "MX/Veracruz (Jarocho)": ["mexico", "xalapa-mx"],
+          "MX/Yucatan": ["mexico", "merida-mx campeche-mx chetumal-mx"],
+          "MX/Northern (Norteño)": ["mexico", "monterrey-mx saltillo-mx chihuahua-mx ciudad-juarez-mx hermosillo-mx culiacan-mx mexicali-mx tijuana-mx ciudad-victoria-mx"],
+          "MX/Oaxaca and Chiapas": ["mexico", "oaxaca-mx tuxtla-mx"],
+          "CO/Caribbean (Vallenato and cumbia)": ["cumbia", "barranquilla-co cartagena-co santa-marta-co monteria-co valledupar-co sincelejo-co riohacha-co"],
+          "CO/Llanos": ["cumbia", "villavicencio-co yopal-co arauca-co"],
+          "CO/Pacific coast": ["cumbia", "quibdo-co"],
+          "BR/Northeast (forró)": ["forro", "recife-br fortaleza-br natal-br joao-pessoa-br maceio-br aracaju-br teresina-br sao-luis-br"],
+          "BR/Bahia": ["afrobeat", "salvador-br"],
+          "BR/Southeast (samba and choro)": ["bossa", "rio-de-janeiro-br sao-paulo-br belo-horizonte-br vitoria-br"],
+          "BR/South (gaucho)": ["bossa", "porto-alegre-br curitiba-br florianopolis-br"],
+          "BR/Amazon (carimbó)": ["bossa", "belem-br manaus-br"],
+          "TZ/Zanzibar and coast": ["hijaz", "dar-es-salaam-tz"],
+          "EG/Upper Egypt (Saidi)": ["hijaz", "luxor-eg aswan-eg qina-eg sohag-eg asyut-eg minya-eg"],
+          "EG/Nubia": ["hijaz", "aswan-eg"],
+          "EG/Canal cities (simsimiyya)": ["hijaz", "port-said-eg suez-eg ismailia-eg"],
+          "PE/Andes": ["andean", "cusco-pe puno-pe huancayo-pe ayacucho-pe arequipa-pe huaraz-pe cajamarca-pe abancay-pe huancavelica-pe cerro-de-pasco-pe huanuco-pe"],
+          "PE/Afro-Peruvian coast": ["cumbia", "lima-pe ica-pe trujillo-pe chiclayo-pe piura-pe"],
+          "PE/Amazon (chicha)": ["cumbia", "iquitos-pe pucallpa-pe puerto-maldonado-pe"],
+          "UA/Carpathians (Hutsul)": ["slavic", "ivano-frankivsk-ua chernivtsi-ua uzhhorod-ua lviv-ua ternopil-ua"],
+          "AR/Buenos Aires (tango)": ["tango", "buenos-aires-ar la-plata-ar rosario-ar"],
+          "AR/Northwest Andes": ["andean", "salta-ar san-miguel-de-tucuman-ar san-salvador-de-jujuy-ar santiago-del-estero-ar catamarca-ar la-rioja-ar"],
+          "AR/Litoral (chamame)": ["", "corrientes-ar posadas-ar resistencia-ar formosa-ar santa-fe-ar parana-ar"],
+          "AR/Cuyo and Pampas": ["", "mendoza-ar san-juan-ar san-luis-ar buenos-aires-ar"],
+          "EC/Andes": ["andean", "quito-ec cuenca-ec ambato-ec riobamba-ec loja-ec ibarra-ec latacunga-ec"],
+          "EC/Afro-Esmeraldas": ["cumbia", "esmeraldas-ec"],
+          "VE/Llanos": ["cumbia", "barinas-ve san-fernando-de-apure-ve guanare-ve san-carlos-ve"],
+          "VE/Coast (Afro-Venezuelan)": ["cumbia", "caracas-ve barcelona-ve cumana-ve maturin-ve"],
+          "PT/Lisbon and Coimbra (fado)": ["fado", "lisbon-pt coimbra-pt porto-pt setubal-pt"],
+          "PT/Minho and north": ["fado", "braga-pt viana-do-castelo-pt braganca-pt vila-real-pt viseu-pt"],
+          "PT/Madeira": ["fado", "funchal-pt"],
+          "PT/Azores": ["fado", "ponta-delgada-pt"],
+          "DE/Bavaria (Alpine)": ["", "munich-de"],
+          "DE/Rhineland (carnival)": ["", "cologne-de dusseldorf-de"],
+          "KR/Jeolla (pansori)": ["", "jeonju-kr gwangju-kr muan-kr"],
+          "CL/Central Chile (cueca)": ["cumbia", "santiago-cl valparaiso-cl rancagua-cl talca-cl chillan-cl"],
+          "CL/North (Andean)": ["andean", "arica-cl iquique-cl antofagasta-cl"],
+          "CL/Chiloe and south": ["cumbia", "puerto-montt-cl punta-arenas-cl valdivia-cl temuco-cl"],
+          "CA/Quebec": ["", "montreal-ca quebec-ca ottawa-ca"],
+          "CA/Maritimes and Newfoundland": ["celtic", "halifax-ca charlottetown-ca st-john-s-ca fredericton-ca"],
+          "CA/Arctic and North": ["", "whitehorse-ca yellowknife-ca"],
+          "CU/Matanzas and Havana (rumba)": ["", "matanzas-cu havana-cu"],
+          "PH/Mindanao (Maguindanao)": ["", "davao-ph zamboanga-ph cotabato-ph butuan-ph pagadian-ph koronadal-ph"],
+          "PH/Cordillera (Igorot)": ["", "baguio-ph"],
+          "HR/Dalmatia": ["balkan", "split-hr"],
+          "HR/Istria and Dalmatia": ["balkan", "rijeka-hr"],
+          "NO/Sami (north)": ["", "tromso-no bodo-no"],
+          "PK/Punjab": ["india", "lahore-pk faisalabad-pk gujranwala-pk multan-pk islamabad-pk"],
+          "PK/Sindh": ["india", "karachi-pk hyderabad-pk"],
+          "PK/Pashtun (northwest)": ["india", "peshawar-pk bannu-pk"],
+          "PK/Balochistan": ["india", "quetta-pk"],
+          "PK/Gilgit-Baltistan": ["india", "gilgit-pk muzaffarabad-pk"],
+          "ZA/Cape Town": ["afrobeat", "cape-town-za"],
+          "ZA/Xhosa (Eastern Cape)": ["afrobeat", "bhisho-za gqeberha-za"],
+          "GR/Crete": ["balkan", "heraklion-gr"],
+          "GR/Epirus and North": ["balkan", "ioannina-gr kozani-gr komotini-gr thessaloniki-gr"],
+          "GR/Ionian Islands": ["balkan", "corfu-gr"],
+          "AT/Vienna": ["", "vienna-at"],
+          "BO/La Paz and Altiplano": ["andean", "la-paz-bo oruro-bo potosi-bo sucre-bo"],
+          "GB/Scotland": ["celtic", "glasgow-gb edinburgh-gb"],
+          "GB/Wales": ["celtic", "cardiff-gb"],
+          "GB/Northern Ireland": ["celtic", "belfast-gb"],
+          "GB/England": ["", "london-gb birmingham-gb manchester-gb"],
+          "MA/Amazigh (Atlas, Souss)": ["westAfrica", "agadir-ma marrakesh-ma beni-mellal-ma guelmim-ma"],
+          "TW/Indigenous (Amis)": ["china", "taipei-tw"],
+          AE: ["hijaz"],
+          AF: ["india"],
+          AL: ["balkan"],
+          AM: ["balkan"],
+          AO: ["afrobeat"],
+          AR: ["tango"],
+          AZ: ["persian"],
+          BA: ["balkan"],
+          BD: ["india"],
+          BF: ["afrobeat"],
+          BG: ["balkan"],
+          BH: ["hijaz"],
+          BI: ["afrobeat"],
+          BJ: ["afrobeat"],
+          BO: ["andean"],
+          BR: ["bossa"],
+          BS: ["reggae"],
+          BT: ["india"],
+          BW: ["afrobeat"],
+          BY: ["slavic"],
+          BZ: ["reggae"],
+          CD: ["afrobeat"],
+          CF: ["afrobeat"],
+          CG: ["afrobeat"],
+          CI: ["afrobeat"],
+          CL: ["cumbia"],
+          CM: ["afrobeat"],
+          CN: ["china"],
+          CO: ["cumbia"],
+          CR: ["cumbia"],
+          CV: ["afrobeat"],
+          CY: ["balkan"],
+          DJ: ["hijaz"],
+          DZ: ["hijaz"],
+          EC: ["cumbia"],
+          EG: ["hijaz"],
+          EH: ["westAfrica"],
+          ES: ["flamenco"],
+          GA: ["afrobeat"],
+          GB: ["celtic"],
+          GE: ["balkan"],
+          GH: ["westAfrica"],
+          GI: ["flamenco"],
+          GM: ["afrobeat"],
+          GN: ["afrobeat"],
+          GQ: ["afrobeat"],
+          GR: ["balkan"],
+          GT: ["cumbia"],
+          GW: ["afrobeat"],
+          HK: ["china"],
+          HN: ["cumbia"],
+          HR: ["balkan"],
+          HU: ["balkan"],
+          IE: ["celtic"],
+          IM: ["celtic"],
+          IN: ["india"],
+          IQ: ["hijaz"],
+          IR: ["persian"],
+          JM: ["reggae"],
+          JO: ["hijaz"],
+          JP: ["japan"],
+          KE: ["afrobeat"],
+          KG: ["steppe"],
+          KM: ["hijaz"],
+          KO: ["balkan"],
+          KW: ["hijaz"],
+          KZ: ["steppe"],
+          LB: ["hijaz"],
+          LK: ["india"],
+          LR: ["westAfrica"],
+          LS: ["afrobeat"],
+          LY: ["hijaz"],
+          MA: ["hijaz"],
+          MD: ["balkan"],
+          ME: ["balkan"],
+          MG: ["afrobeat"],
+          MK: ["balkan"],
+          ML: ["westAfrica"],
+          MN: ["steppe"],
+          MO: ["china"],
+          MR: ["westAfrica"],
+          MW: ["afrobeat"],
+          MX: ["mexico"],
+          MZ: ["afrobeat"],
+          NA: ["afrobeat"],
+          NE: ["westAfrica"],
+          NG: ["afrobeat"],
+          NI: ["cumbia"],
+          NP: ["india"],
+          OM: ["hijaz"],
+          PA: ["cumbia"],
+          PE: ["cumbia"],
+          PK: ["india"],
+          PS: ["hijaz"],
+          PT: ["fado"],
+          PY: ["cumbia"],
+          QA: ["hijaz"],
+          RO: ["balkan"],
+          RS: ["balkan"],
+          RU: ["slavic"],
+          RW: ["afrobeat"],
+          SA: ["hijaz"],
+          SD: ["hijaz"],
+          SG: ["china"],
+          SL: ["westAfrica"],
+          SN: ["afrobeat"],
+          SO: ["hijaz"],
+          SS: ["afrobeat"],
+          ST: ["afrobeat"],
+          SV: ["cumbia"],
+          SY: ["hijaz"],
+          SZ: ["afrobeat"],
+          TD: ["afrobeat"],
+          TG: ["afrobeat"],
+          TJ: ["persian"],
+          TM: ["steppe"],
+          TN: ["hijaz"],
+          TR: ["hijaz"],
+          TW: ["china"],
+          TZ: ["afrobeat"],
+          UA: ["slavic"],
+          UG: ["afrobeat"],
+          UY: ["tango"],
+          UZ: ["persian"],
+          VE: ["cumbia"],
+          XK: ["balkan"],
+          YE: ["hijaz"],
+          ZA: ["afrobeat"],
+          ZM: ["afrobeat"],
+          ZW: ["afrobeat"],
+        };
+        // The style of a place: its region's, else its country's, else "" (plain lo-fi).
+        function regionOf(country, city) {
+          for (const [style, cities] of [...Object.values(OWN_REGIONS), ...Object.values(REGIONS)])
+            if (cities?.split(" ").includes(city)) return style;
+          return REGIONS[country]?.[0] || "";
+        }
+        const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
+        function rngFrom(seed) {
+          let a = seed >>> 0;
+          return () => {
+            a = (a + 0x6d2b79f5) | 0;
+            let t = Math.imul(a ^ (a >>> 15), 1 | a);
+            t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+            return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+          };
+        }
+
+        function song(seed, mood = {}) {
+          const r = rngFrom(seed),
+            pick = (a) => a[Math.floor(r() * a.length)];
+          const night = clamp(+mood.night || 0, 0, 1),
+            rain = clamp(+mood.rain || 0, 0, 1);
+          // a regional style (or the kaiju's) bends the song; the dice are thrown the same either way, so
+          // without one the song is exactly the plain lo-fi one
+          const styleName = mood.kaiju ? "kaiju" : STYLES[mood.region] ? mood.region : "",
+            style = STYLES[styleName],
+            modeName = style?.modes?.[(seed >>> 0) % style.modes.length],
+            mode = MODES[modeName];
+          const minorRoll = r() < 0.25 + 0.5 * night,
+            minor = mode ? mode.minor : minorRoll,
+            scale = mode ? mode.scale : minor ? MINOR : MAJOR,
+            keyRoll = Math.floor(r() * 12),
+            key = style?.key ?? keyRoll;
+          const tone = (k) => key + scale[k % 7] + 12 * Math.floor(k / 7);
+          // a tranquil lo-fi tempo: 62 to 74 at night, up to 80 by day (the owner found 58 to 95 too uppity)
+          let bpm = Math.round(62 + r() * 12 + 6 * (1 - night));
+          if (style?.bpm) bpm = style.bpm[0] + (bpm % (style.bpm[1] - style.bpm[0] + 1));
+          const motif = [pick(MOVES), pick(MOVES), pick(MOVES)];
+          let colourName = pick(Object.keys(COLOURS)),
+            colour = COLOURS[colourName];
+          if (style?.colour)
+            [colourName, colour] = Array.isArray(style.colour)
+              ? ["own", style.colour]
+              : [style.colour, COLOURS[style.colour]];
+          // a diminished chord sounds wrong in a loop: V instead (the major key's vii, and in a mode any
+          // chord with a diminished fifth)
+          const dim = (d) => (mode ? (scale[(d + 4) % 7] - scale[d] + 12) % 12 === 6 : !minor && d === 6);
+          const chordOn = (deg) => {
+            let d = ((deg % 7) + 7) % 7;
+            if (dim(d)) d = dim(4) ? 0 : 4; // (in a mode whose V is diminished too, the I)
+            // where the 2nd or 9th would clash (a half step over the root), a plain seventh chord instead
+            const flat9 = (scale[(d + 1) % 7] - scale[d] + 12) % 12 === 1;
+            const keys = (flat9 && (colour.includes(1) || colour.includes(8)) ? COLOURS.seventh : colour).map(
+              (k) => 48 + tone(d + k),
+            );
+            return voiced(keys, tone(d) % 12);
+          };
+          function voiced(keys, pc) {
+            const lift = 12 * Math.ceil((52 - Math.min(...keys)) / 12); // lowest note in 52..63
+            return { root: pc < 7 ? 36 + pc : 24 + pc, keys: keys.map((n) => n + lift) };
+          }
+          // a four-bar loop unfolded from a degree: the degree, then the gene's three moves from it
+          const unfold = (deg) =>
+            [0, 1, 2, 3].map((i) => chordOn(deg + motif.slice(0, i).reduce((a, b) => a + b, 0)));
+          const start = pick(STARTS);
+          let chords = unfold(start),
+            chordsB = unfold(start + motif[0]); // B starts where A's second chord is
+          // a style with its own progressions (style.progs: [[A, B?], ...]) takes one by the seed's bits, so the
+          // dice below are thrown the same either way
+          const [prog, progB] = style?.progs?.[(seed >>> 4) % style.progs.length] ?? [];
+          if (prog) {
+            chords = prog.map((c) =>
+              voiced(
+                c.map((x) => 48 + key + x),
+                (key + c[0]) % 12,
+              ),
+            );
+            chordsB = chords.slice(1).concat(chords[0]);
+          }
+          if (progB)
+            chordsB = progB.map((c) =>
+              voiced(
+                c.map((x) => 48 + key + x),
+                (key + c[0]) % 12,
+              ),
+            );
+          // close voice leading (style.close): each chord in the shape nearest the one before, in 52..69
+          if (style?.close) {
+            const shapes = (keys) => {
+              const out = [];
+              for (let inv = 0; inv < keys.length; inv++)
+                for (let oct = -24; oct <= 24; oct += 12) {
+                  const v = keys.map((n, j) => n + oct + (j < inv ? 12 : 0)).sort((a, b) => a - b);
+                  if (v[0] >= 52 && v.at(-1) <= 69) out.push(v);
+                }
+              return out;
+            };
+            const lead = (list, prev) =>
+              list.map((c) => {
+                const sorted = [...c.keys].sort((a, b) => a - b),
+                  options = shapes(sorted);
+                if (!options.length) return (prev = c);
+                const far = (v) =>
+                  prev ? v.reduce((a, n, j) => a + Math.abs(n - (prev.keys[j] ?? n)), 0) : v[0];
+                return (prev = { ...c, keys: options.reduce((b, v) => (far(v) < far(b) ? v : b)) });
+              });
+            chords = lead(chords);
+            chordsB = lead(chordsB, chords.at(-1));
+          }
+          // melody: a walk on the pentatonic scale that lands on a chord tone at the start of each bar
+          const pent = mode ? mode.pent : minor ? [0, 3, 5, 7, 10] : [0, 2, 4, 7, 9],
+            pool = [];
+          for (let n = 67; n <= 86; n++) if (pent.includes((n - key + 120) % 12)) pool.push(n);
+          const nearest = (list, n) => list.reduce((b, p) => (Math.abs(p - n) < Math.abs(b - n) ? p : b));
+          const rubs = (n, pcs) => pcs.some((p) => [1, 11].includes((n - p + 120) % 12));
+          // keep[bar], when given, is a bar copied as it is (a returning phrase keeps its hook)
+          function phrase(from, cells, keep = [], ch = chords) {
+            let note = from;
+            return cells.map((cell, bar) => {
+              // feedback: where the last bar ended turns this one (high goes down, low goes up)
+              const dir = note > 79 ? -1 : note < 73 ? 1 : bar % 2 ? -1 : 1;
+              if (keep[bar]) {
+                note = keep[bar].at(-1)[1];
+                return keep[bar];
+              }
+              const pcs = ch[bar].keys.concat(ch[bar].root).map((n) => n % 12),
+                landing = [];
+              for (let n = 67; n <= 86; n++) if (pcs.includes(n % 12)) landing.push(n);
+              return cell.map(([step, len], j) => {
+                if (j === 0) note = nearest(landing, note);
+                else {
+                  const m = motif[(j - 1 + bar) % 3], // the gene again, at the size of notes
+                    move = r() < 0.2 ? pick([-1, 0, 1]) : dir * Math.sign(m) * Math.min(2, Math.abs(m)),
+                    i = pool.indexOf(nearest(pool, note)) + move;
+                  note = pool[clamp(i, 0, pool.length - 1)];
+                  // a note held an eighth or longer moves off a half step from the chord (it would rub)
+                  if (len >= 2 && rubs(note, pcs)) {
+                    const k = pool.indexOf(note),
+                      near = [pool[k + dir], pool[k - dir]].find((n) => n && !rubs(n, pcs));
+                    if (near) note = near;
+                  }
+                }
+                return [step, note, len];
+              });
+            });
+          }
+          const other = (list, not) => pick(list.filter((x) => x !== not)) ?? not,
+            busy = CELLS.filter((c) => c.length >= 4);
+          function tune(from, ch) {
+            const c = pick(CELLS),
+              end = pick(ENDS),
+              mel = phrase(from, [c, pick(CELLS), c, end], [], ch);
+            // coming back: the same first and third bars, a new second bar and a different ending
+            const again = phrase(from, [c, other(CELLS, c), c, other(ENDS, end)], [mel[0], null, mel[2]], ch);
+            return [mel, again];
+          }
+          const [melA, melA2] = tune(72, chords),
+            [melB, melB2] = tune(81, chordsB),
+            solo = phrase(79, [pick(busy), pick(busy), pick(busy), pick(ENDS)]);
+          const bandName = pick(Object.keys(BANDS)),
+            band = { ...BANDS[bandName], ...style?.band },
+            loop = pick(band.loops),
+            lead = pick(band.leads);
+          // two to three minutes of four-bar sections
+          const secLen = (4 * 240) / bpm,
+            target = 120 + r() * 60;
+          const count = clamp(Math.round(target / secLen), Math.ceil(120 / secLen), Math.floor(180 / secLen));
+          const middle = pick(FORMS);
+          let form = ["intro"];
+          for (let i = 0; form.length < count - 1; i++) form.push(middle[i % middle.length]);
+          form.push("outro");
+          if (style?.form) form = style.form;
+          const swing = 0.1 + r() * 0.12;
+          const sheet = {
+            seed: seed >>> 0,
+            bpm,
+            key,
+            minor,
+            swing: LOOPS[loop].swing || swing,
+            band: style?.band ? styleName : bandName,
+            voices: { chords: band.chords, lead, solo: other(band.leads, lead), bass: band.bass },
+            drums: band.drums,
+            hits: band.hits || [0, 8],
+            echo: band.echo,
+            level: band.level,
+            click: band.drums === "clicks" || r() < 0.35 ? pick(CLICKS) : "",
+            loop,
+            motif,
+            colour: colourName,
+            chords,
+            chordsB,
+            melA,
+            melB,
+            melA2,
+            melB2,
+            solo,
+            form,
+            bars: form.length * 4,
+            seconds: form.length * secLen,
+            cutoff: Math.round((3400 - 1600 * night) * (0.85 + r() * 0.3)),
+            wobble: 5 + r() * 10,
+            crackle: 0.25 + r() * 0.5,
+            rain,
+            thunder: Boolean(mood.thunder) && rain > 0,
+            places: mood.places !== false,
+            crowd: clamp(+mood.crowd || 0, 0, 1),
+            trains: Boolean(mood.trains),
+            sea: Boolean(mood.sea),
+            wind: clamp(+mood.wind || 0, 0, 1),
+            // birds by day and crickets on warm nights, both quiet in the rain
+            birds: rain ? 0 : clamp(1 - night * 1.6, 0, 1),
+            crickets: rain || !mood.warm ? 0 : clamp(night * 1.6 - 0.6, 0, 1),
+          };
+          if (!style) return sheet;
+          // the style's own parts, only in its songs (so plain sheets keep exactly their old fields)
+          const own = style.leads?.[(seed >>> 3) % style.leads.length];
+          if (own) sheet.voices = { ...sheet.voices, lead: own, solo: lead };
+          if (style.swing != null) sheet.swing = style.swing;
+          // pulled back towards lo-fi: a darker tape, and a lead that would sit high (a whistle, the pipes, a
+          // fiddle, a steel, a reed) an octave down
+          sheet.cutoff = Math.round(sheet.cutoff * 0.8);
+          if (LOW_LEADS.includes(sheet.voices.lead))
+            for (const name of ["melA", "melB", "melA2", "melB2"])
+              sheet[name] = sheet[name].map((bar) => bar.map(([step, n, len]) => [step, n - 12, len]));
+          if (style.fanfare)
+            for (const name of ["melA", "melB", "melA2", "melB2"])
+              sheet[name] = [[], ...sheet[name].slice(1)];
+          const o = style.ostinato;
+          return Object.assign(sheet, {
+            region: styleName,
+            mode: modeName || "",
+            grace: Boolean(style.grace),
+            drone: style.drone || "",
+            strum: style.strum || null,
+            perc: style.perc || {},
+            meter: style.meter || "",
+            ostinato: o
+              ? o.bars.map((bar) => bar.map(([step, x, len]) => [step, o.follow ? x : o.base + key + x, len]))
+              : null,
+            ostinatoFollow: Boolean(o?.follow),
+            ostinatoVoice: o?.voice || "",
+            ostinatoDouble: o?.double || "",
+            fanfare: style.fanfare || null,
+            gong: style.gong || "",
+            hold: style.hold || 0,
+          });
+        }
+
+        // ---- the synth ----
+        // ---- the sampled instruments (script#lofi-samples, written by tools/samples.py) ----
+        // {voice: [[root, loop start, loop end, base64 of 8-bit mu-law at 11025 Hz], ...]}, read once
+        let SAMPLES;
+        // the reverb (Player and lofi.c): eight delay lines in ms that feed each other, its decay (seconds to fall
+        // 60 dB), the damping low-pass each line goes through, and how much of the chords and tunes go in and come out
+        const RV_MS = [31.7, 37.3, 41.9, 47.1, 53.3, 59.9, 67.1, 73.7],
+          RV_TIME = 3.2,
+          RV_DAMP = 2000,
+          RV_SEND = 0.4,
+          RV_OUT = 0.4;
+        const GAITA = 0.85,
+          SPANISH = 2,
+          GRAND = 1.6; // their loudness against the synthesized voices (lofi.c has the same numbers)
+        // ---- four ideas that each have a switch (CONFIG.music.nf, ?nf=): drift, breathe, swell, phaser ----
+        // The phaser (Player and lofi.c): two all-passes swept around PH_HZ by PH_DEPTH, half wet, on the pads,
+        // drones and the organ; and a quiet water bed (WATER: band-pass frequency, gain, swell, period).
+        const PH_HZ = 900,
+          PH_DEPTH = 600,
+          PH_Q = 0.7,
+          phaserRate = (s) => 0.05 + (s.seed % 7) / 100,
+          WATER = [
+            [380, 0.03, 0.6, 5],
+            [900, 0.02, 0.7, 7],
+            [2100, 0.012, 0.8, 11],
+          ];
+        // Drift: brightness moves instead of loudness. Every four bars each part (lanes 1 chords, 2 lead, 3 the
+        // regional parts, 4 pads and drones) eases to its own low-pass between 500 and 5000 Hz, and every
+        // sixteenth bar they all meet on one. The tape's low-pass (lane 0) swings over 64 bars, closes over the
+        // bar before a new A, solo or break and opens quickly into it.
+        function drift(p, s, bar, t) {
+          const u = (k, b) => rngFrom((Math.imul(s.seed + 1, 0x9e3779b1) ^ (b * 131 + k)) >>> 0)(),
+            len = 960 / s.bpm / 4, // a bar in seconds
+            sec = (b) => s.form[Math.floor(b / 4)],
+            bridge = (b) => ["A", "solo", "break"].includes(sec(b)) && sec(b) !== sec(b - 1);
+          if (bar % 4 === 3 && bridge(bar + 1)) p.bright(t, 0, s.cutoff * 0.6, len / 3);
+          if (bar % 4) return;
+          const swing = 2 ** (0.5 * Math.sin(2 * Math.PI * (bar / 64 + u(0, 0))));
+          p.bright(t, 0, s.cutoff * swing, !bar ? 0.01 : bridge(bar) ? len / 4 : len * 2);
+          for (let k = 1; k <= 4; k++)
+            p.bright(t, k, 500 * 10 ** u(bar % 16 === 12 ? 9 : k, bar), bar ? len * 1.5 : 0.01);
+        }
+        // Swell: how thin the parts are at a bar, 0 (all of them) to 0.7, over 24 to 40 bars. A step whose
+        // importance is under it is left out: sixteenth hats first, then ghost notes, off-beat strums and
+        // ostinato notes, extra chord hits, and last the hats on the beat. The first step of a bar always plays.
+        const swellAt = (s, bar) => 0.35 - 0.35 * Math.cos((2 * Math.PI * bar) / (24 + (s.seed % 17)));
+        // Breathe: the lead of a section is a call (its first bar, the theme) and an answer (the same rhythm on
+        // the root or fifth of the next chord, its last note held to the bar's end), then two bars of rest.
+        // After the theme the call is kept for none or one section, then shortened, then left out, until an A
+        // section or the end of a solo brings the theme back. A break plays only the call; the solo plays in full.
+        function breathe(s, name, bar) {
+          const mel = s[name],
+            b = bar % 4,
+            sec = Math.floor(bar / 4);
+          if (name === "solo") return mel[b];
+          if (b > 1 || (b && !SECTIONS[s.form[sec]].includes("drums"))) return [];
+          const lead = (j) => (SECTIONS[s.form[j]] || "").split(" ").find((p) => p.startsWith("mel")),
+            theme = (j) => s.form[j].startsWith("A") || !lead(j - 1);
+          let k = 0; // sections since the theme
+          while (!theme(sec - k)) k++;
+          let call = mel[0];
+          const keep = s.seed % 2; // sections after the theme that keep its call
+          if (k > keep) {
+            if ((k - keep) % 2 === 0) return [];
+            const half = call.slice(0, Math.ceil(call.length / 2)),
+              [ms, n, len] = half.at(-1);
+            call = [...half.slice(0, -1), [ms, n, Math.min(16 - ms, len * 2)]];
+          }
+          if (!b) return call;
+          const ch = (s.chordsB && s.form[sec].startsWith("B") ? s.chordsB : s.chords)[1],
+            pcs = [ch.root % 12];
+          if (ch.keys.some((n) => (n - ch.root + 120) % 12 === 7)) pcs.push((ch.root + 7) % 12);
+          const near = (n) => {
+            for (let d = 0; ; d++) for (const m of [n - d, n + d]) if (pcs.includes(m % 12)) return m;
+          };
+          return call.map(([ms, n, len], j) => [ms, near(n), j === call.length - 1 ? 16 - ms : len]);
+        }
+        const samples = () =>
+          (SAMPLES ??= JSON.parse(globalThis.document?.getElementById("lofi-samples")?.textContent || "{}"));
+        // G.711 mu-law to -1..1, the same as lofi.c's ulaw()
+        const ULAW = Float32Array.from({ length: 256 }, (_, u) => {
+          u = ~u & 0xff;
+          const x = (((u & 0x0f) << 3) + 0x84) << ((u >> 4) & 7);
+          return (u & 0x80 ? 0x84 - x : x - 0x84) / 32768;
+        });
+        // the lines that hand a song's sampled instruments to the native engine with its song (NativeSong)
+        const sampleLines = (names) =>
+          Object.entries(samples())
+            .filter(([name]) => names.has(name))
+            .flatMap(([name, notes]) => notes.map((note) => ["@smp", name, ...note].join(" ")));
+        // The reverb's impulse response, worked out once per AudioContext by running lofi.c's reverb on a click:
+        // eight delay lines (RV_MS), each read through a Butterworth low-pass (RV_DAMP) and turned down so it
+        // falls 60 dB in RV_TIME seconds, then fed back into itself and, through a Householder matrix (minus a
+        // quarter of their sum), into all the others. 4 s of it.
+        const irs = new WeakMap();
+        function reverbIR(ctx) {
+          if (irs.has(ctx)) return irs.get(ctx);
+          const sr = ctx.sampleRate,
+            ir = ctx.createBuffer(1, 4 * sr, sr),
+            out = ir.getChannelData(0),
+            w = (2 * Math.PI * RV_DAMP) / sr,
+            alpha = Math.sin(w) / (2 * 10 ** (-3.01 / 20)),
+            a0 = 1 + alpha,
+            b0 = (1 - Math.cos(w)) / 2 / a0,
+            b1 = (1 - Math.cos(w)) / a0,
+            a1 = (-2 * Math.cos(w)) / a0,
+            a2 = (1 - alpha) / a0,
+            lines = RV_MS.map((ms) => {
+              const len = Math.min(4096, Math.max(1, Math.round((ms * sr) / 1000)));
+              return {
+                buf: new Float32Array(len),
+                pos: 0,
+                g: 10 ** ((-3 * ms) / 1000 / RV_TIME),
+                x1: 0,
+                x2: 0,
+                y1: 0,
+                y2: 0,
+              };
+            }),
+            ry = new Float32Array(8);
+          for (let i = 0; i < out.length; i++) {
+            let sum = 0;
+            lines.forEach((l, k) => {
+              const x = l.buf[l.pos],
+                y = b0 * x + b1 * l.x1 + b0 * l.x2 - a1 * l.y1 - a2 * l.y2;
+              ((l.x2 = l.x1), (l.x1 = x), (l.y2 = l.y1), (l.y1 = y));
+              sum += ry[k] = y * l.g;
+            });
+            lines.forEach((l, k) => {
+              l.buf[l.pos] = (i === 0 ? 1 : 0) + ry[k] - 0.25 * sum;
+              l.pos = (l.pos + 1) % l.buf.length;
+            });
+            out[i] = RV_OUT * sum;
+          }
+          irs.set(ctx, ir);
+          return ir;
+        }
+        const decoded = new WeakMap(); // per AudioContext: the samples as AudioBuffers, made when first played
+        const shared = new WeakMap(); // per AudioContext: noise, vinyl and the tape curve, made once
+        function kit(ctx) {
+          let k = shared.get(ctx);
+          if (k) return k;
+          const sr = ctx.sampleRate,
+            noise = ctx.createBuffer(1, sr * 2, sr),
+            vinyl = ctx.createBuffer(1, sr * 4, sr),
+            curve = new Float32Array(1024);
+          const nd = noise.getChannelData(0),
+            vd = vinyl.getChannelData(0);
+          for (let i = 0; i < nd.length; i++) nd[i] = Math.random() * 2 - 1;
+          for (let i = 0; i < vd.length; i++)
+            vd[i] =
+              (Math.random() * 2 - 1) * 0.012 + (Math.random() < 0.0004 ? (Math.random() - 0.5) * 0.7 : 0);
+          for (let i = 0; i < 1024; i++) curve[i] = Math.tanh(1.6 * (i / 511.5 - 1)) / Math.tanh(1.6);
+          shared.set(ctx, (k = { noise, vinyl, curve }));
+          return k;
+        }
+        const hz = (n) => 440 * 2 ** ((n - 69) / 12);
+
+        class Player {
+          constructor(ctx, dest, sheet, start, fadeIn = 3, nf = {}) {
+            const k = kit(ctx);
+            this.ctx = ctx;
+            this.s = sheet;
+            this.nf = nf;
+            this.cur = 0;
+            this.loop = LOOPS[sheet.loop] || LOOPS.lazy;
+            this.sd = 60 / sheet.bpm / 4;
+            this.step = 0;
+            this.start = start;
+            this.end = this.stopAt = start + sheet.bars * 16 * this.sd;
+            this.fader = ctx.createGain();
+            this.fader.gain.setValueAtTime(0, start);
+            this.fader.gain.linearRampToValueAtTime(1, start + fadeIn);
+            this.fader.connect(dest);
+            // tape: soft saturation, then a dark low-pass
+            const sat = ctx.createWaveShaper(),
+              lp = ctx.createBiquadFilter();
+            sat.curve = k.curve;
+            lp.type = "lowpass";
+            lp.frequency.value = sheet.cutoff;
+            lp.Q.value = 0.4;
+            this.bus = ctx.createGain();
+            this.bus.gain.value = 0.8 * (sheet.level || 1);
+            const trim = ctx.createGain(); // the saturator peaks at 1, so leave room for the beds and the echo
+            trim.gain.value = 0.8;
+            this.bus.connect(sat).connect(lp).connect(trim).connect(this.fader);
+            // chords and leads play into this.tone, which goes to the bus and to an echo send
+            // (a delay fed back through a dark low-pass)
+            const [send, steps, feedback] = sheet.echo || [0, 3, 0],
+              sendG = ctx.createGain(),
+              delay = ctx.createDelay(2),
+              dark = ctx.createBiquadFilter();
+            this.tone = ctx.createGain();
+            this.tone.connect(this.bus);
+            this.back = ctx.createGain();
+            sendG.gain.value = send;
+            delay.delayTime.value = Math.min(2, steps * this.sd);
+            dark.type = "lowpass";
+            dark.frequency.value = 1500;
+            this.back.gain.value = feedback;
+            this.tone.connect(sendG).connect(delay).connect(dark).connect(this.back).connect(delay);
+            dark.connect(this.bus);
+            // a reverb under the echo: lofi.c's feedback delay network (reverbIR), played here as its impulse
+            // response through a convolver, so both engines ring the same
+            const verb = ctx.createConvolver(),
+              rvIn = ctx.createGain();
+            rvIn.gain.value = RV_SEND;
+            verb.normalize = false;
+            verb.buffer = reverbIR(ctx);
+            this.tone.connect(rvIn).connect(verb).connect(this.bus);
+            this.tapeLP = lp;
+            this.main = [this.tone, this.bus];
+            // tape wobble: a slow LFO on the pitch of every note
+            this.lfo = ctx.createOscillator();
+            this.lfo.frequency.value = 0.4 + (sheet.seed % 5) / 10;
+            this.wobble = ctx.createGain();
+            this.wobble.gain.value = sheet.wobble;
+            this.lfo.connect(this.wobble);
+            this.lfo.start(start);
+            // the place's sounds go through their own muffled low-pass, like a lo-fi field recording
+            this.amb = ctx.createGain();
+            const muffle = ctx.createBiquadFilter();
+            muffle.type = "lowpass";
+            muffle.frequency.value = 3200;
+            this.amb.connect(muffle).connect(this.fader);
+            // vinyl crackle, and rain when it rains at that place
+            this.beds = [this.lfo];
+            // the lanes (drift and phaser): each part's chords and tunes, and its sounds for the bus, through
+            // their own low-pass (bright); the pads' lane also through the phaser
+            if (nf.drift || nf.phaser) {
+              this.lanes = [this.main];
+              for (let n = 1; n <= 4; n++)
+                this.lanes.push(
+                  this.main.map((to, j) => {
+                    const f = ctx.createBiquadFilter();
+                    f.frequency.value = 20000;
+                    f.Q.value = 0;
+                    f.connect(to);
+                    if (n === 4 && !j && nf.phaser) {
+                      // half dry, half through two all-passes that a slow LFO sweeps: moving notches
+                      const lfo = ctx.createOscillator(),
+                        depth = ctx.createGain(),
+                        half = ctx.createGain(),
+                        wet = ctx.createGain();
+                      f.disconnect();
+                      f.connect(half).connect(to);
+                      half.gain.value = wet.gain.value = 0.5;
+                      lfo.frequency.value = phaserRate(sheet);
+                      depth.gain.value = PH_DEPTH;
+                      lfo.connect(depth);
+                      let x = f;
+                      for (let a = 0; a < 2; a++) {
+                        const ap = ctx.createBiquadFilter();
+                        ap.type = "allpass";
+                        ap.frequency.value = PH_HZ;
+                        ap.Q.value = PH_Q;
+                        depth.connect(ap.frequency);
+                        x = x.connect(ap);
+                      }
+                      x.connect(wet).connect(to);
+                      lfo.start(start);
+                      this.beds.push(lfo);
+                    }
+                    return f;
+                  }),
+                );
+            }
+            const bed = (buffer, type, freq, gain, swell = 0, period = 9, to = this.amb) => {
+              const src = ctx.createBufferSource(),
+                f = ctx.createBiquadFilter(),
+                g = ctx.createGain();
+              src.buffer = buffer;
+              src.loop = true;
+              f.type = type;
+              f.frequency.value = freq;
+              g.gain.value = gain;
+              if (swell) {
+                // a slow rise and fall: waves breaking, gusts of wind
+                const lfo = ctx.createOscillator(),
+                  depth = ctx.createGain();
+                lfo.frequency.value = 1 / (period * (0.8 + Math.random() * 0.4));
+                depth.gain.value = gain * swell;
+                lfo.connect(depth).connect(g.gain);
+                if (type === "bandpass") lfo.connect(depth).connect(f.frequency); // wind also whistles up and down
+                lfo.start(start);
+                this.beds.push(lfo);
+              }
+              src.connect(f).connect(g).connect(to);
+              src.start(start, Math.random() * 2);
+              this.beds.push(src);
+            };
+            bed(k.vinyl, "highpass", 900, 0.25 * sheet.crackle, 0, 9, this.fader);
+            if (!sheet.places) return;
+            if (sheet.crowd > 0) bed(k.noise, "lowpass", 160, 0.13 * sheet.crowd, 0.3, 17); // distant traffic
+            if (sheet.rain > 0) {
+              bed(k.noise, "bandpass", 2400, 0.12 * sheet.rain); // the hiss
+              bed(k.noise, "lowpass", 420, 0.16 * sheet.rain * sheet.rain); // a low wash, for heavy rain
+            }
+            if (sheet.sea) bed(k.noise, "lowpass", 650, 0.07, 0.9, 8); // waves, one every 8 s or so
+            if (sheet.wind > 0.15) bed(k.noise, "bandpass", 420, 0.05 * sheet.wind, 0.8, 13);
+            // the phaser's water: noise through a few fixed band-passes, rising and falling, when it doesn't rain
+            if (nf.phaser && !(sheet.rain > 0))
+              for (const [f, g, sw, per] of WATER) bed(k.noise, "bandpass", f, g, sw, per);
+          }
+          // A bird: two to four quick whistles sweeping up or down.
+          chirp(t) {
+            const ctx = this.ctx,
+              n = 2 + Math.floor(Math.random() * 3),
+              f = 2600 + Math.random() * 2400,
+              up = Math.random() < 0.5;
+            for (let i = 0; i < n; i++) {
+              const o = ctx.createOscillator(),
+                g = ctx.createGain(),
+                at = t + i * (0.07 + Math.random() * 0.03);
+              o.frequency.setValueAtTime(f * (up ? 0.85 : 1.15), at);
+              o.frequency.exponentialRampToValueAtTime(f, at + 0.05);
+              g.gain.setValueAtTime(0, at);
+              g.gain.linearRampToValueAtTime(0.018, at + 0.01);
+              g.gain.exponentialRampToValueAtTime(0.0001, at + 0.06);
+              o.connect(g).connect(this.amb);
+              o.start(at);
+              o.stop(at + 0.07);
+            }
+          }
+          // A cricket: three fast pulses of a high tone.
+          trill(t) {
+            const ctx = this.ctx,
+              o = ctx.createOscillator(),
+              g = ctx.createGain();
+            o.frequency.value = 4300 + Math.random() * 600;
+            g.gain.setValueAtTime(0, t);
+            for (let i = 0; i < 3; i++) {
+              g.gain.setValueAtTime(0.008, t + i * 0.045);
+              g.gain.setValueAtTime(0, t + i * 0.045 + 0.018);
+            }
+            o.connect(g).connect(this.amb);
+            o.start(t);
+            o.stop(t + 0.15);
+          }
+          // One drop on the window: a short high plink that falls a little in pitch.
+          drop(t, gain) {
+            const ctx = this.ctx,
+              o = ctx.createOscillator(),
+              g = ctx.createGain(),
+              f = 1800 + Math.random() * 2600;
+            o.type = "sine";
+            o.frequency.setValueAtTime(f, t);
+            o.frequency.exponentialRampToValueAtTime(f * 0.7, t + 0.05);
+            g.gain.setValueAtTime(0, t);
+            g.gain.linearRampToValueAtTime(gain, t + 0.003);
+            g.gain.exponentialRampToValueAtTime(0.0001, t + 0.07);
+            o.connect(g).connect(this.amb);
+            o.start(t);
+            o.stop(t + 0.08);
+          }
+          // Thunder: filtered noise that swells and dies away over seconds. A near one starts with a crack.
+          thunder(t, near) {
+            const ctx = this.ctx,
+              src = ctx.createBufferSource(),
+              f = ctx.createBiquadFilter(),
+              g = ctx.createGain(),
+              long = 4 + Math.random() * 3;
+            src.buffer = kit(ctx).noise;
+            src.loop = true;
+            f.type = "lowpass";
+            f.frequency.setValueAtTime(near ? 900 : 260, t);
+            f.frequency.exponentialRampToValueAtTime(90, t + long);
+            g.gain.setValueAtTime(0, t);
+            g.gain.linearRampToValueAtTime(near ? 2.2 : 1.6, t + (near ? 0.05 : 0.6)); // loud, because so little noise is left under 260 Hz
+            g.gain.exponentialRampToValueAtTime(0.0001, t + long);
+            src.connect(f).connect(g).connect(this.amb);
+            src.start(t, Math.random() * 1.5);
+            src.stop(t + long + 0.1);
+          }
+          // A piece of filtered noise: the wheels' clacks and the train's rumble.
+          noise(t, type, freq, q, peak, attack, len, endFreq) {
+            const ctx = this.ctx,
+              src = ctx.createBufferSource(),
+              f = ctx.createBiquadFilter(),
+              g = ctx.createGain();
+            src.buffer = kit(ctx).noise;
+            src.loop = true;
+            f.type = type;
+            f.Q.value = q;
+            f.frequency.setValueAtTime(freq, t);
+            if (endFreq) f.frequency.exponentialRampToValueAtTime(endFreq, t + len);
+            g.gain.setValueAtTime(0, t);
+            g.gain.linearRampToValueAtTime(peak, t + attack);
+            g.gain.exponentialRampToValueAtTime(0.0001, t + len);
+            src.connect(f).connect(g).connect(this.amb);
+            src.start(t, Math.random() * 1.5);
+            src.stop(t + len + 0.05);
+          }
+          // Someone talking nearby: a short phrase of syllables, each a low hum (a person's pitch, gliding
+          // a little) through two vowel bands, so it murmurs instead of hissing.
+          voice(t) {
+            const ctx = this.ctx,
+              pitch = 100 + Math.random() * 120,
+              out = ctx.createGain();
+            out.gain.value = 0.5 + Math.random() * 0.3;
+            out.connect(this.amb);
+            for (let n = 3 + Math.floor(Math.random() * 5), at = t; n > 0; n--) {
+              const len = 0.09 + Math.random() * 0.16,
+                o = ctx.createOscillator(),
+                g = ctx.createGain();
+              o.type = "sawtooth";
+              o.frequency.setValueAtTime(pitch * (0.9 + Math.random() * 0.25), at);
+              o.frequency.linearRampToValueAtTime(pitch * (0.85 + Math.random() * 0.2), at + len);
+              for (const [lo, hi] of [
+                [300, 800],
+                [900, 2000],
+              ]) {
+                const f = ctx.createBiquadFilter();
+                f.type = "bandpass";
+                f.frequency.value = lo + Math.random() * (hi - lo);
+                f.Q.value = 6;
+                o.connect(f).connect(g);
+              }
+              g.gain.setValueAtTime(0, at);
+              g.gain.linearRampToValueAtTime(0.25, at + 0.03);
+              g.gain.linearRampToValueAtTime(0, at + len);
+              g.connect(out);
+              o.start(at);
+              o.stop(at + len + 0.02);
+              at += len + 0.03 + Math.random() * 0.12;
+            }
+          }
+          // A train going past: a rumble that swells and fades, and the wheels clacking over each rail joint
+          // (two bogies a car, ta-tak ... ta-tak), loudest as the middle of the train passes.
+          train(t) {
+            const cars = 5 + Math.floor(Math.random() * 5),
+              gap = 0.5 + Math.random() * 0.25, // seconds from one car to the next
+              len = cars * gap + 2;
+            this.noise(t, "lowpass", 220, 0.7, 0.9, len * 0.45, len, 120);
+            for (let c = 0; c < cars; c++)
+              for (const bogie of [0, 0.13]) {
+                const at = t + 1 + c * gap + bogie,
+                  near = 1 - Math.abs((c + 0.5) / cars - 0.5) * 1.4;
+                this.noise(at, "bandpass", 1500 + Math.random() * 400, 1.2, 0.35 * near, 0.003, 0.05);
+                this.noise(at, "lowpass", 300, 1, 0.5 * near, 0.003, 0.08);
+              }
+          }
+          fadeOut(at, secs) {
+            const g = this.fader.gain;
+            g.cancelScheduledValues(at);
+            g.setValueAtTime(g.value, at);
+            g.linearRampToValueAtTime(0, at + secs);
+            this.stopAt = Math.min(this.stopAt, at + secs);
+          }
+          dispose() {
+            for (const b of this.beds) b.stop();
+            this.fader.disconnect();
+            this.back.disconnect(); // break the echo loop
+          }
+          schedule(until) {
+            while (this.step < this.s.bars * 16) {
+              // in 6/8 each four steps are a dotted beat: three eighths, then the sixteenth before the next beat
+              const i = this.step % 4,
+                at = this.s.meter ? this.step - i + [0, 4 / 3, 8 / 3, 10 / 3][i] : this.step,
+                t = this.start + at * this.sd;
+              if (t >= until || t >= this.stopAt) return;
+              this.play(this.step, t + (this.step % 2 ? this.sd * this.s.swing : 0)); // swing: off-steps late
+              this.step++;
+            }
+          }
+          play(step, t) {
+            // the place, between the notes: birds by day, crickets at night, voices, a train now and then,
+            // and the weather: drops on the window, and in a storm a rumble every 25 s or so
+            if (this.s.places) {
+              const sd = this.sd,
+                at = () => t + Math.random() * sd;
+              if (Math.random() < 0.035 * this.s.birds) this.chirp(at());
+              if (Math.random() < 0.3 * this.s.crickets) this.trill(at());
+              if (Math.random() < 0.06 * this.s.crowd) this.voice(at()); // a phrase every few seconds in a busy city
+              if (this.s.trains && Math.random() < sd / 75) this.train(at()); // about one every 75 s
+              if (Math.random() < 0.5 * this.s.rain) this.drop(at(), 0.02 + Math.random() * 0.03);
+              if (this.s.thunder && Math.random() < sd / 25) this.thunder(at(), Math.random() < 0.25);
+            }
+            const s = this.s,
+              L = this.loop,
+              bar = Math.floor(step / 16),
+              i = step % 16,
+              sd = this.sd;
+            const parts = (SECTIONS[s.form[Math.floor(bar / 4)]] || "").split(" "),
+              has = (p) => parts.includes(p),
+              chord = (s.chordsB && s.form[Math.floor(bar / 4)]?.startsWith("B") ? s.chordsB : s.chords)[
+                bar % 4
+              ],
+              v = s.voices || { chords: "keys", lead: s.lead || "keys", bass: "bass" },
+              hits = s.hits || [0, 8],
+              human = () => 0.85 + Math.random() * 0.3,
+              nf = this.nf || {},
+              thin = nf.swell ? swellAt(s, bar) : 0,
+              keep = (importance) => importance >= thin,
+              // the lane the next voices play in (drift and phaser), written down only when it changes
+              lane = (k) => {
+                if (!nf.drift) k = k === 4 && nf.phaser ? 4 : 0;
+                if (k !== this.cur) this.lane((this.cur = k));
+              },
+              padLane = v.chords === "pad" ? 4 : 1;
+            if (nf.drift && i === 0) drift(this, s, bar, t);
+            if (has("chords") && hits.includes(i) && (i === hits[0] || keep(0.55))) {
+              lane(padLane);
+              chord.keys.forEach((n, j) =>
+                this[v.chords](
+                  n,
+                  t + j * 0.012,
+                  s.hold ? Math.min(s.hold, 16 - i) * sd : sd * (hits.length < 2 ? 15 : i ? 6 : 7),
+                  (i ? 0.07 : 0.1) * human(),
+                ),
+              );
+            }
+            if (nf.phaser && padLane === 1 && has("chords") && i === 2) {
+              // a quiet organ under the chords, through the phaser, from an eighth into the bar (when the last
+              // bar's chord has let go): only the root, third and fifth, and none a half step from another chord
+              // note, so its long notes don't rub against the sevenths and ninths
+              const pc = (n) => (n - chord.root + 120) % 12;
+              lane(4);
+              for (const n of chord.keys)
+                if (
+                  [0, 3, 4, 7].includes(pc(n)) &&
+                  !chord.keys.some((m) => [1, 11].includes((pc(m) - pc(n) + 12) % 12))
+                )
+                  this.organ(n, t, sd * 14, 0.025);
+            }
+            if (has("bass") && L.bass[i] !== ".") {
+              lane(0);
+              // a step that would sit a half step under a chord note (the loop's sixth under a seventh) plays
+              // the fifth, or the root, instead; the kaiju song keeps its rubs on purpose
+              const under = (x) => chord.keys.some((n) => (n - chord.root - x + 120) % 12 === 1);
+              let x = +L.bass[i];
+              if (s.region !== "kaiju" && under(x)) x = under(7) ? 0 : 7;
+              this[v.bass](chord.root + x, t, sd * 3);
+            }
+            if (has("drums")) {
+              const K = KITS[s.drums] || KITS.kit;
+              lane(0);
+              if (L.kick[i] === "x") this[K.kick](t, human());
+              if (L.snare[i] === "x") this[K.snare](t, human());
+              else if (bar % 4 === 3 && i === 15 && keep(0.25)) this[K.snare](t, 0.4); // a ghost note into the next section
+              if (L.hat[i] === "x" && (!i || keep(i % 4 ? (i % 2 ? 0.15 : 0.3) : 0.65)))
+                this[K.hat](t, (i % 4 ? 0.55 : 1) * human());
+              if (L.open[i] === "x" && keep(0.35)) this[K.open](t, 1);
+            }
+            if (has("clicks") && s.click && s.click[i] === "x" && (i % 4 === 0 || keep(0.3))) {
+              lane(0);
+              this[(i >> 2) % 2 ? "tock" : "tick"](t, 0.6 * human());
+            }
+            const name = parts.find((p) => p.startsWith("mel") || p === "solo"),
+              mel = name && s[name];
+            if (mel)
+              for (const [, n, len] of (nf.breathe ? breathe(s, name, bar) : mel[bar % 4]).filter(
+                ([ms]) => ms === i,
+              )) {
+                lane(2);
+                if (s.grace && name !== "solo" && len >= 3) {
+                  // a cut: a quick note above, then the note itself a moment late
+                  this[v.lead](n + 2, t + 0.01, 0.04, 0.05);
+                  this[v.lead](n, t + 0.05, sd * len - 0.04, 0.08 * human());
+                } else
+                  this[name === "solo" ? v.solo || v.lead : v.lead](n, t + 0.01, sd * len, 0.08 * human());
+              }
+            // a regional style's parts (STYLES): the drone, a strummed chord, its percussion and the ostinato
+            if (s.drone && bar % 4 === 0 && i === 0) {
+              lane(4);
+              const root = 45 + ((s.key + 3) % 12), // 45..56
+                list = s.chordsB && s.form[Math.floor(bar / 4)]?.startsWith("B") ? s.chordsB : s.chords,
+                rubs = (n, c) => c.keys.concat(c.root).some((p) => [1, 11].includes((n - p + 120) % 12));
+              // each drone note holds for as many bars as the chords leave it alone (a half step would rub)
+              for (const n of [root, root + 7]) {
+                const run = list.findIndex((c) => rubs(n, c)),
+                  bars = run < 0 ? 4 : run;
+                if (bars) this[s.drone](n, t, sd * 16 * bars + 0.3, 0.03);
+              }
+            }
+            const lt = t + 0.012, // the regional parts sit a little behind the beat
+              stroke = s.strum && has("drums") && (i % 4 === 0 || keep(0.5)) ? s.strum[1][i] : ".";
+            if (stroke !== ".") lane(3);
+            if (stroke === "a")
+              chord.keys.forEach((n, j) => this[s.strum[0]](n, lt + (j * sd) / 2, sd * 3, 0.05 * human()));
+            else if (stroke !== ".")
+              for (let k = 0; k < (stroke === "r" ? 3 : 1); k++)
+                chord.keys.forEach((n, j) =>
+                  this[s.strum[0]](n, lt + (k * sd) / 3 + j * 0.015, sd * 2, 0.04 * human()),
+                );
+            if (s.perc && has("drums"))
+              for (const [drum, steps] of Object.entries(s.perc)) {
+                if (steps[i] !== ".") lane(0);
+                if (steps[i] === "x") {
+                  if (i % 4 === 0 || keep(0.4)) this[drum](lt, (i % 4 ? 0.45 : 0.8) * human());
+                } else if (steps[i] === "f") {
+                  // a flam: a soft grace stroke just before the real one
+                  if (keep(0.3)) this[drum](lt - 0.025, 0.15 * human());
+                  this[drum](lt, 0.5 * human());
+                } else if (steps[i] === "r" && bar % 4 === 3 && keep(0.45))
+                  // a roll: four quick strokes that grow into the next section
+                  for (let k = 0; k < 4; k++) this[drum](lt + (k * sd) / 6, (0.2 + k * 0.08) * human());
+              }
+            if (s.ostinato && has("bass"))
+              for (const [ms, x, len] of s.ostinato[bar % 4])
+                // the riff's filter opens and closes over eight bars (its brightness follows the velocity)
+                if (ms === i && (ms % 4 === 0 || keep(0.45))) {
+                  lane(3);
+                  const keys = [...chord.keys].sort((a, b) => a - b),
+                    n = s.ostinatoFollow ? keys[x % keys.length] + 12 * Math.floor(x / keys.length) - 12 : x;
+                  this[s.ostinatoVoice](n, t, sd * len, 0.07 + 0.03 * Math.sin((bar * Math.PI) / 4));
+                  if (s.ostinatoDouble) this[s.ostinatoDouble](n, t, sd * len, 0.06);
+                }
+            if (s.gong && bar % 4 === 0 && i === 0) {
+              lane(0);
+              this[s.gong](t, 1);
+            }
+            if (s.fanfare)
+              for (const [b, ms, notes, len] of s.fanfare)
+                if (b === bar % 4 && ms === i) {
+                  lane(padLane);
+                  for (const n of notes) this[v.chords](n, t, sd * len, 0.09);
+                }
+          }
+          // the lane (1 to 4) the next voices play in, or 0 for none: their chords and tunes and their sounds
+          // for the bus go through that lane's low-pass instead (drift), and the pads' through the phaser
+          lane(k) {
+            [this.tone, this.bus] = this.lanes?.[k] || this.main;
+          }
+          // a lane's low-pass (or the tape's, lane 0) eases to hz from t, with a time constant of tau
+          bright(t, k, hz, tau) {
+            for (const f of k ? this.lanes[k] : [this.tapeLP]) f.frequency.setTargetAtTime(hz, t, tau);
+          }
+          // ---- voices ----
+          env(t, peak, attack, decay, out = this.bus) {
+            const g = this.ctx.createGain();
+            g.gain.setValueAtTime(0, t);
+            g.gain.linearRampToValueAtTime(peak, t + attack);
+            g.gain.setTargetAtTime(0, t + attack, decay / 4);
+            g.connect(out);
+            return g;
+          }
+          lowpass(t, from, to, time, q = 0.7) {
+            const f = this.ctx.createBiquadFilter();
+            f.type = "lowpass";
+            f.Q.value = q;
+            // once per 128-sample block is plenty for a slow sweep, and much cheaper than every sample
+            f.frequency.automationRate = "k-rate";
+            f.frequency.setValueAtTime(from, t);
+            f.frequency.setTargetAtTime(to, t, time);
+            return f;
+          }
+          osc(type, f, t, stop) {
+            const o = this.ctx.createOscillator();
+            o.type = type;
+            o.frequency.value = f;
+            o.detune.automationRate = "k-rate"; // the wobble is under 1 Hz: per block is enough, and cheaper
+            this.wobble.connect(o.detune);
+            o.start(t);
+            o.stop(stop);
+            return o;
+          }
+          fm(n, t, dur, vel, ratio, bright, mellow) {
+            const f = hz(n),
+              end = t + dur + 1.5,
+              car = this.osc("sine", f, t, end),
+              mod = this.osc("sine", f * ratio, t, end),
+              idx = this.ctx.createGain();
+            idx.gain.setValueAtTime(f * bright, t);
+            idx.gain.setTargetAtTime(f * 0.2, t, mellow);
+            mod.connect(idx).connect(car.frequency);
+            car.connect(this.env(t, vel, 0.006, dur + 0.8, this.tone));
+          }
+          keys(n, t, dur, vel) {
+            this.fm(n, t, dur, vel, 1, 1.8, 0.12); // an electric piano
+          }
+          bell(n, t, dur, vel) {
+            this.fm(n - 12, t, Math.min(dur, 0.6), vel * 0.8, 3.5, 1.2, 0.05); // an octave down, mellower
+          }
+          flute(n, t, dur, vel) {
+            // an alto flute an octave down: a soft sine that slides up into the note, a slow vibrato, a breath
+            this.wind(n - 12, t, dur, vel * 0.9, "sine", 0, 0, 0.15, 25, 10, 0.006);
+          }
+          felt(n, t, dur, vel) {
+            // a felt piano: a triangle and a soft octave through a low-pass that closes as the note dies
+            const f = hz(n),
+              end = t + dur + 2.5,
+              lp = this.lowpass(t, 2400, 450, 0.3),
+              oct = this.ctx.createGain();
+            lp.connect(this.env(t, vel * 1.3, 0.01, dur + 1.5, this.tone));
+            oct.gain.value = 0.3;
+            this.osc("triangle", f, t, end).connect(lp);
+            this.osc("sine", f * 2, t, end)
+              .connect(oct)
+              .connect(lp);
+          }
+          vibes(n, t, dur, vel) {
+            // a vibraphone: a sine, a short fourth partial and the motor's tremolo
+            const f = hz(n),
+              end = t + dur + 2.5,
+              trem = this.ctx.createGain(),
+              depth = this.ctx.createGain(),
+              lfo = this.ctx.createOscillator();
+            trem.gain.value = 0.75;
+            depth.gain.value = 0.25;
+            lfo.frequency.value = 4.5;
+            lfo.connect(depth).connect(trem.gain);
+            lfo.start(t);
+            lfo.stop(end);
+            trem.connect(this.env(t, vel * 1.1, 0.003, dur + 1.8, this.tone));
+            this.osc("sine", f, t, end).connect(trem);
+            this.osc("sine", f * 4, t, t + 0.6).connect(this.env(t, 0.12, 0.002, 0.25, trem));
+          }
+          horn(n, t, dur, vel) {
+            // a muted trumpet, low like a flugelhorn: a sawtooth that scoops up into the note, through a dark
+            // band-pass
+            const o = this.osc("sawtooth", hz(n - 12), t, t + dur + 0.5),
+              bp = this.ctx.createBiquadFilter(),
+              g = this.ctx.createGain();
+            o.detune.setValueAtTime(-40, t);
+            o.detune.linearRampToValueAtTime(0, t + 0.06);
+            bp.type = "bandpass";
+            bp.frequency.value = 900;
+            bp.Q.value = 2.5;
+            g.gain.setValueAtTime(0, t);
+            g.gain.linearRampToValueAtTime(vel, t + 0.08);
+            g.gain.setTargetAtTime(vel * 0.6, t + 0.08, 0.2);
+            g.gain.setTargetAtTime(0, t + dur, 0.06);
+            o.connect(bp).connect(g).connect(this.tone);
+          }
+          organ(n, t, dur, vel) {
+            // a quiet organ: a sine and its octave, slow to swell and slow to fade
+            const g = this.ctx.createGain(),
+              oct = this.ctx.createGain();
+            g.gain.setValueAtTime(0, t);
+            g.gain.linearRampToValueAtTime(vel, t + 0.8);
+            g.gain.setTargetAtTime(0, t + dur, 0.5);
+            oct.gain.value = 0.35;
+            this.osc("sine", hz(n), t, t + dur + 3).connect(g);
+            this.osc("sine", hz(n) * 2, t, t + dur + 3)
+              .connect(oct)
+              .connect(g);
+            g.connect(this.tone);
+          }
+          pad(n, t, dur, vel) {
+            // a warm pad: two detuned sawtooths, dark, slow to swell
+            const lp = this.lowpass(t, 900, 900, 1, 0.5),
+              g = this.ctx.createGain();
+            g.gain.setValueAtTime(0, t);
+            g.gain.linearRampToValueAtTime(vel * 0.4, t + 0.6);
+            g.gain.setTargetAtTime(0, t + dur, 0.4);
+            for (const d of [-8, 8]) {
+              const o = this.osc("sawtooth", hz(n), t, t + dur + 2.5);
+              o.detune.value = d;
+              o.connect(lp);
+            }
+            lp.connect(g).connect(this.tone);
+          }
+          // tremolo: a gain whose level an LFO moves by depth, rate times a second
+          trem(t, end, rate, depth, out) {
+            const g = this.ctx.createGain(),
+              d = this.ctx.createGain(),
+              lfo = this.ctx.createOscillator();
+            g.gain.value = 1 - depth;
+            d.gain.value = depth;
+            lfo.frequency.value = rate;
+            lfo.connect(d).connect(g.gain);
+            lfo.start(t);
+            lfo.stop(end);
+            g.connect(out);
+            return g;
+          }
+          rhodes(n, t, dur, vel) {
+            // a Rhodes: a soft electric piano (a low FM index) with its stereo tremolo, here a slow wobble
+            const f = hz(n),
+              end = t + dur + 2,
+              car = this.osc("sine", f, t, end),
+              mod = this.osc("sine", f, t, end),
+              idx = this.ctx.createGain();
+            idx.gain.setValueAtTime(f * 0.9, t);
+            idx.gain.setTargetAtTime(f * 0.1, t, 0.25);
+            mod.connect(idx).connect(car.frequency);
+            car.connect(this.trem(t, end, 3.2, 0.3, this.env(t, vel * 1.1, 0.008, dur + 1, this.tone)));
+          }
+          wurli(n, t, dur, vel) {
+            // a Wurlitzer: reedier than the Rhodes, a square through a low-pass, with a faster tremolo
+            const end = t + dur + 1.5,
+              lp = this.lowpass(t, 1800, 700, 0.2);
+            this.osc("square", hz(n), t, end).connect(lp);
+            lp.connect(this.trem(t, end, 5.5, 0.25, this.env(t, vel * 0.55, 0.005, dur + 0.6, this.tone)));
+          }
+          kalimba(n, t, dur, vel) {
+            // a thumb piano: a sine with a short, high, out-of-tune tine knock
+            this.fm(n, t, Math.min(dur, 0.5), vel * 1.1, 5.4, 0.7, 0.02);
+          }
+          musicbox(n, t, dur, vel) {
+            // a music box: a clean comb tooth that rings and dies, with only a hint of its tinkle
+            const f = hz(n);
+            this.osc("sine", f, t, t + 2).connect(this.env(t, vel * 0.8, 0.002, 1.2, this.tone));
+            this.osc("sine", f * 3, t, t + 0.4).connect(this.env(t, vel * 0.06, 0.001, 0.15, this.tone));
+          }
+          marimba(n, t, dur, vel) {
+            // a marimba: a woody sine with its fourth partial knocked in for a moment
+            const f = hz(n);
+            this.osc("sine", f, t, t + 1).connect(this.env(t, vel * 1.2, 0.002, 0.5, this.tone));
+            this.osc("sine", f * 4, t, t + 0.2).connect(this.env(t, vel * 0.12, 0.001, 0.06, this.tone));
+          }
+          guitar(n, t, dur, vel) {
+            // a clean jazz guitar, played with the thumb: a dark pluck that rings for the note
+            const lp = this.lowpass(t, 1600, hz(n) * 2, 0.15, 0.8);
+            this.osc("triangle", hz(n), t, t + dur + 1).connect(lp);
+            this.osc("sawtooth", hz(n), t, t + dur + 1).connect(this.env(t, 0.25, 0.002, 0.3, lp));
+            lp.connect(this.env(t, vel * 1.2, 0.003, Math.min(dur, 0.8) + 0.4, this.tone));
+          }
+          whistle(n, t, dur, vel) {
+            // a theremin-like voice, low and singing: a sine that glides up into the note, with a slow, wide
+            // vibrato that comes in late (it was a whistle an octave up, too bright for lo-fi)
+            this.wind(n - 12, t, dur, vel * 0.6, "sine", 0, 0, 0.12, 40, 16, 0.006);
+          }
+          // a plucked string: a bright attack whose low-pass closes fast, then a short ring
+          plk(n, t, vel, type, bright, ring) {
+            const lp = this.lowpass(t, bright, hz(n) * 1.5, 0.06, 1);
+            this.osc(type, hz(n), t, t + ring * 5 + 0.1).connect(lp);
+            lp.connect(this.env(t, vel, 0.002, ring * 4, this.tone));
+          }
+          pluck(n, t, dur, vel) {
+            this.plk(n - 12, t, vel * 0.9, "square", 1400, 0.3); // an octave down, darker
+          }
+          nylon(n, t, dur, vel) {
+            this.plk(n, t, vel * 1.4, "sawtooth", 2200, 0.6);
+          }
+          upright(n, t, dur) {
+            // a plucked upright: a sawtooth whose low-pass closes right after the pluck
+            const lp = this.lowpass(t, 1100, 220, 0.08);
+            this.osc("sawtooth", hz(n), t, t + dur + 0.8).connect(lp);
+            lp.connect(this.env(t, 0.6, 0.004, Math.min(dur, 0.5) + 0.4));
+          }
+          bass(n, t, dur) {
+            const lp = this.ctx.createBiquadFilter();
+            lp.type = "lowpass";
+            lp.frequency.value = 380;
+            this.osc("triangle", hz(n), t, t + dur + 0.3)
+              .connect(lp)
+              .connect(this.env(t, 0.5, 0.01, dur));
+          }
+          sub(n, t, dur) {
+            // a round sine sub bass, an octave low
+            this.osc("sine", hz(n), t, t + dur + 0.3).connect(this.env(t, 0.6, 0.015, dur));
+          }
+          kick(t, vel) {
+            const o = this.ctx.createOscillator();
+            o.frequency.setValueAtTime(110, t);
+            o.frequency.exponentialRampToValueAtTime(42, t + 0.12);
+            o.connect(this.env(t, 0.85 * vel, 0.003, 0.35));
+            o.start(t);
+            o.stop(t + 0.5);
+          }
+          hit(t, dur, type, freq, vel, attack = 0.002) {
+            const src = this.ctx.createBufferSource(),
+              f = this.ctx.createBiquadFilter();
+            src.buffer = kit(this.ctx).noise;
+            f.type = type;
+            f.frequency.value = freq;
+            src.connect(f).connect(this.env(t, vel, attack, dur));
+            src.start(t, Math.random() * 1.5, dur + attack + 0.1);
+          }
+          ping(f, t, dur, vel, type = "sine") {
+            this.osc(type, f, t, t + dur + 0.05).connect(this.env(t, vel, 0.001, dur));
+          }
+          // drum voices: (time, velocity about 1); KITS says which row plays which
+          snare(t, vel) {
+            this.hit(t, 0.18, "bandpass", 1700, 0.32 * vel);
+          }
+          hat(t, vel) {
+            this.hit(t, 0.04, "highpass", 7000, 0.09 * vel);
+          }
+          open(t, vel) {
+            this.hit(t, 0.22, "highpass", 6000, 0.06 * vel);
+          }
+          softKick(t, vel) {
+            this.kick(t, 0.6 * vel);
+          }
+          brush(t, vel) {
+            this.hit(t, 0.3, "bandpass", 2800, 0.2 * vel, 0.03);
+          }
+          ride(t, vel) {
+            this.hit(t, 0.5, "bandpass", 7500, 0.08 * vel);
+            this.ping(3700, t, 0.3, 0.012 * vel, "square");
+          }
+          tick(t, vel) {
+            this.ping(2400, t, 0.02, 0.2 * vel);
+          }
+          tock(t, vel) {
+            this.ping(1500, t, 0.03, 0.25 * vel);
+          }
+          rim(t, vel) {
+            this.hit(t, 0.03, "bandpass", 2200, 0.35 * vel);
+            this.ping(1800, t, 0.015, 0.06 * vel, "square");
+          }
+          clap(t, vel) {
+            // a lo-fi clap: three quick bursts of band-passed noise, then the tail
+            for (const d of [0, 0.011, 0.022]) this.hit(t + d, 0.02, "bandpass", 1200, 0.18 * vel);
+            this.hit(t + 0.03, 0.15, "bandpass", 1100, 0.14 * vel);
+          }
+          shaker(t, vel) {
+            this.hit(t, 0.07, "highpass", 5500, 0.08 * vel, 0.015);
+          }
+          // ---- the voices of regional styles (STYLES) and of the kaiju song ----
+          // a wind or bowed lead: a wave that scoops up into the note (scoop cents, over the attack), through
+          // a band-pass for the instrument's body (none when bp is 0), with a vibrato of vib cents that comes in
+          // late and a breath of noise
+          wind(n, t, dur, vel, type, bp, q, attack, scoop, vib, breath) {
+            const o = this.osc(type, hz(n), t, t + dur + 0.5),
+              g = this.ctx.createGain();
+            o.detune.setValueAtTime(-scoop, t);
+            o.detune.linearRampToValueAtTime(0, t + attack);
+            if (vib) {
+              const lfo = this.ctx.createOscillator(),
+                depth = this.ctx.createGain();
+              lfo.frequency.value = 5.5;
+              depth.gain.setValueAtTime(0, t);
+              depth.gain.linearRampToValueAtTime(vib, t + Math.min(dur, 0.5));
+              lfo.connect(depth).connect(o.detune);
+              lfo.start(t);
+              lfo.stop(t + dur + 0.5);
+            }
+            g.gain.setValueAtTime(0, t);
+            g.gain.linearRampToValueAtTime(vel, t + attack);
+            g.gain.setTargetAtTime(0, t + dur, 0.06);
+            g.connect(this.tone);
+            if (bp) {
+              const f = this.ctx.createBiquadFilter();
+              f.type = "bandpass";
+              f.frequency.value = bp;
+              f.Q.value = q;
+              o.connect(f).connect(g);
+            } else o.connect(g);
+            if (breath) this.hit(t, Math.min(dur, 0.5), "bandpass", hz(n) * 2, breath, attack);
+          }
+          bowed(n, t, dur, vel) {
+            this.wind(n, t, dur, vel * 0.9, "sawtooth", 1400, 1.2, 0.12, 40, 22, 0); // an erhu or a fiddle
+          }
+          reed(n, t, dur, vel) {
+            this.wind(n, t, dur, vel * 0.7, "square", 1300, 2.5, 0.06, 25, 12, 0); // a dulzaina, zurna or shawm
+          }
+          sax(n, t, dur, vel) {
+            this.wind(n - 12, t, dur, vel * 0.9, "sawtooth", 1000, 0.9, 0.04, 30, 15, 0.01); // a tenor sax
+          }
+          pipes(n, t, dur, vel) {
+            this.wind(n, t, dur, vel * 0.9, "sawtooth", 1600, 1.8, 0.01, 0, 0, 0); // a bagpipe chanter, steady
+          }
+          fife(n, t, dur, vel) {
+            this.wind(n, t, dur, vel * 0.8, "triangle", 0, 0, 0.07, 0, 10, 0.01); // a tin whistle
+          }
+          shaku(n, t, dur, vel) {
+            this.wind(n, t, dur, vel * 0.9, "sine", 0, 0, 0.1, 60, 15, 0.03); // a shakuhachi, ney or bansuri
+          }
+          drone(n, t, dur, vel) {
+            this.wind(n, t, dur, vel, "sawtooth", 700, 0.8, 0.3, 0, 0, 0); // a bagpipe's drones or a tanpura
+          }
+          plucked(n, t, dur, vel) {
+            this.plk(n, t, vel * 1.3, "sawtooth", 2600, 0.45); // a guitar, an oud, a saz
+          }
+          zither(n, t, dur, vel) {
+            this.plk(n, t, vel * 1.2, "triangle", 4000, 0.9); // a koto, a guzheng, a kora
+          }
+          riff(n, t, dur, vel) {
+            // a synth riff whose low-pass is brighter the harder it is played
+            this.plk(n, t, vel, "sawtooth", 300 + 20000 * vel * vel, 0.25);
+          }
+          // low brass, an octave down: two sawtooths whose low-pass opens as the note speaks
+          brass(n, t, dur, vel) {
+            const lp = this.lowpass(t, 250, 1500, 0.08, 1),
+              g = this.ctx.createGain();
+            g.gain.setValueAtTime(0, t);
+            g.gain.linearRampToValueAtTime(vel * 0.9, t + 0.06);
+            g.gain.setTargetAtTime(vel * 0.6, t + 0.06, 0.3);
+            g.gain.setTargetAtTime(0, t + dur, 0.1);
+            for (const d of [-6, 6]) {
+              const o = this.osc("sawtooth", hz(n - 12), t, t + dur + 0.6);
+              o.detune.value = d;
+              o.connect(lp);
+            }
+            lp.connect(g).connect(this.tone);
+          }
+          // low strings, played hard and short (marcato)
+          strings(n, t, dur, vel) {
+            const lp = this.lowpass(t, 900, 900, 1, 0.5),
+              g = this.ctx.createGain();
+            g.gain.setValueAtTime(0, t);
+            g.gain.linearRampToValueAtTime(vel, t + 0.03);
+            g.gain.setTargetAtTime(vel * 0.6, t + 0.03, 0.15);
+            g.gain.setTargetAtTime(0, t + dur, 0.08);
+            for (const d of [-10, 10]) {
+              const o = this.osc("sawtooth", hz(n), t, t + dur + 0.5);
+              o.detune.value = d;
+              o.connect(lp);
+            }
+            lp.connect(g).connect(this.bus);
+          }
+          timpani(n, t, dur) {
+            this.osc("sine", hz(n + 12), t, t + 2).connect(this.env(t, 0.4, 0.004, 1.4));
+            this.hit(t, 0.12, "lowpass", 600, 0.25);
+          }
+          // a drum skin: a sine that falls from one pitch to another
+          thump(t, from, to, drop, vel, decay) {
+            const o = this.ctx.createOscillator();
+            o.frequency.setValueAtTime(from, t);
+            o.frequency.exponentialRampToValueAtTime(to, t + drop);
+            o.connect(this.env(t, vel, 0.003, decay));
+            o.start(t);
+            o.stop(t + decay * 1.5 + 0.1);
+          }
+          frame(t, vel) {
+            // a frame drum: the bodhrán, the daf
+            this.thump(t, 110, 65, 0.08, 0.3 * vel, 0.3);
+            this.hit(t, 0.05, "bandpass", 800, 0.08 * vel);
+          }
+          goblet(t, vel) {
+            // a high, tight drum with a slap: the darbuka, the tabla, the djembe
+            this.thump(t, 330, 260, 0.04, 0.3 * vel, 0.15);
+            this.hit(t, 0.03, "highpass", 3000, 0.12 * vel);
+          }
+          taiko(t, vel) {
+            this.thump(t, 140, 70, 0.1, 0.4 * vel, 0.4);
+            this.hit(t, 0.1, "bandpass", 500, 0.1 * vel);
+          }
+          jingles(t, vel) {
+            // a tambourine's jingles: the pandeireta, the pandeiro
+            this.hit(t, 0.2, "highpass", 7500, 0.08 * vel, 0.004);
+            this.hit(t + 0.025, 0.12, "highpass", 9000, 0.05 * vel);
+          }
+          castanets(t, vel) {
+            this.hit(t, 0.015, "bandpass", 3500, 0.3 * vel);
+            this.hit(t + 0.028, 0.015, "bandpass", 3800, 0.22 * vel);
+          }
+          palmas(t, vel) {
+            // flamenco hand claps: brighter and drier than the lo-fi clap
+            for (const d of [0, 0.007, 0.014]) this.hit(t + d, 0.015, "bandpass", 2000, 0.14 * vel);
+            this.hit(t + 0.02, 0.09, "bandpass", 1700, 0.1 * vel);
+          }
+          tamboril(t, vel) {
+            // a small drum with a snare: the tamboril, a march's side drum
+            this.hit(t, 0.12, "bandpass", 2300, 0.26 * vel);
+            this.thump(t, 260, 220, 0.03, 0.18 * vel, 0.1);
+          }
+          accordion(n, t, dur, vel) {
+            // an accordion or a bandoneón: two reeds a little out of tune with each other (the musette's beat)
+            const lp = this.lowpass(t, 1300, 1300, 1, 0.7),
+              g = this.ctx.createGain();
+            g.gain.setValueAtTime(0, t);
+            g.gain.linearRampToValueAtTime(vel * 0.4, t + 0.03);
+            g.gain.setTargetAtTime(0, t + dur, 0.08);
+            for (const d of [-12, 12]) {
+              const o = this.osc("square", hz(n), t, t + dur + 0.6);
+              o.detune.value = d;
+              o.connect(lp);
+            }
+            lp.connect(g).connect(this.tone);
+          }
+          guitarra(n, t, dur, vel) {
+            // a Portuguese guitar: a bright steel pluck, picked fast (the tremolo) and ringing for the note
+            const ring = Math.max(dur, 0.3),
+              end = t + ring + 0.6,
+              lp = this.lowpass(t, 2800, hz(n) * 3, 0.15, 1);
+            this.osc("sawtooth", hz(n), t, end).connect(lp);
+            lp.connect(this.trem(t, end, 11, 0.45, this.env(t, vel * 2.2, 0.002, ring + 0.3, this.tone)));
+          }
+          vox(n, t, dur, vel) {
+            // a voice singing "ah" with no words: a sawtooth through two vowel bands, with a singer's vibrato
+            const o = this.osc("sawtooth", hz(n), t, t + dur + 0.5),
+              vib = this.ctx.createOscillator(),
+              depth = this.ctx.createGain(),
+              g = this.ctx.createGain();
+            o.detune.setValueAtTime(-30, t);
+            o.detune.linearRampToValueAtTime(0, t + 0.08);
+            vib.frequency.value = 5.5;
+            depth.gain.setValueAtTime(0, t);
+            depth.gain.linearRampToValueAtTime(25, t + Math.min(dur, 0.5));
+            vib.connect(depth).connect(o.detune);
+            vib.start(t);
+            vib.stop(t + dur + 0.5);
+            for (const [f, q] of [
+              [700, 5],
+              [1150, 6],
+            ]) {
+              const bp = this.ctx.createBiquadFilter();
+              bp.type = "bandpass";
+              bp.frequency.value = f;
+              bp.Q.value = q;
+              o.connect(bp).connect(g);
+            }
+            g.gain.setValueAtTime(0, t);
+            g.gain.linearRampToValueAtTime(vel * 1.6, t + 0.08);
+            g.gain.setTargetAtTime(0, t + dur, 0.1);
+            g.connect(this.tone);
+          }
+          twang(n, t, dur, vel) {
+            this.plk(n, t, vel * 1.1, "square", 4500, 0.35); // a twangy electric guitar, a Telecaster's
+          }
+          steel(n, t, dur, vel) {
+            this.wind(n, t, dur, vel * 0.9, "triangle", 0, 0, 0.3, 120, 8, 0); // a pedal steel: a clean string swelling in on the pedal, the bar sliding up (a sawtooth here sounded like a kazoo)
+          }
+          santur(n, t, dur, vel) {
+            this.fm(n, t, Math.min(dur, 0.8), vel * 0.9, 2, 1.5, 0.08); // a hammered zither: the santur
+          }
+          throat(n, t, dur, vel) {
+            // throat singing: a low drone and one of its harmonics whistling above it through a narrow band
+            const f = hz(n - 12),
+              o = this.osc("sawtooth", f, t, t + dur + 0.5),
+              g = this.ctx.createGain();
+            for (const [type, freq, q] of [
+              ["lowpass", 400, 1],
+              ["bandpass", f * 6, 12],
+            ]) {
+              const flt = this.ctx.createBiquadFilter();
+              flt.type = type;
+              flt.frequency.value = freq;
+              flt.Q.value = q;
+              o.connect(flt).connect(g);
+            }
+            g.gain.setValueAtTime(0, t);
+            g.gain.linearRampToValueAtTime(vel * 0.5, t + 0.3);
+            g.gain.setTargetAtTime(0, t + dur, 0.06);
+            g.connect(this.tone);
+          }
+          triangle(t, vel) {
+            this.ping(4200, t, 0.5, 0.02 * vel);
+          }
+          scrape(t, vel) {
+            this.hit(t, 0.07, "bandpass", 3200, 0.12 * vel, 0.03); // a güira or guacharaca
+          }
+          // a recorded instrument: its note nearest n, played faster or slower (and through the tape wobble),
+          // looped while held when it has a loop. False when the page has no samples for it.
+          sample(name, n, t, dur, vel, attack, tail, lp = 0) {
+            const notes = samples()[name];
+            if (!notes?.length) return false;
+            const [root, a, b, data] = notes.reduce((x, y) =>
+              Math.abs(y[0] - n) < Math.abs(x[0] - n) ? y : x,
+            );
+            let bufs = decoded.get(this.ctx);
+            if (!bufs) decoded.set(this.ctx, (bufs = {}));
+            let buf = bufs[name + root];
+            if (!buf) {
+              const bytes = atob(data);
+              buf = bufs[name + root] = this.ctx.createBuffer(1, bytes.length, 11025);
+              const ch = buf.getChannelData(0);
+              for (let i = 0; i < bytes.length; i++) ch[i] = ULAW[bytes.charCodeAt(i)];
+            }
+            const o = this.ctx.createBufferSource(),
+              g = this.ctx.createGain();
+            o.buffer = buf;
+            o.playbackRate.value = 2 ** ((n - root) / 12);
+            this.wobble.connect(o.detune);
+            if (b) Object.assign(o, { loop: true, loopStart: a / 11025, loopEnd: b / 11025 });
+            g.gain.setValueAtTime(0, t);
+            g.gain.linearRampToValueAtTime(vel, t + attack);
+            g.gain.setTargetAtTime(0, t + dur, tail);
+            if (lp) {
+              const f = this.ctx.createBiquadFilter();
+              f.type = "lowpass";
+              f.frequency.value = lp;
+              f.Q.value = 0;
+              o.connect(f).connect(g);
+            } else o.connect(g);
+            g.connect(this.tone);
+            o.start(t);
+            o.stop(t + dur + tail * 8);
+            return true;
+          }
+          gaita(n, t, dur, vel) {
+            // a recorded bagpipe chanter (FreePats' Bagpipe, CC0), or the synthesized pipes without samples
+            if (!this.sample("gaita", n, t, dur, vel * GAITA, 0.02, 0.06)) this.pipes(n, t, dur, vel);
+          }
+          grand(n, t, dur, vel) {
+            // a recorded grand piano, played softly (VCSL's Kawai, CC0): each note rings to its own end
+            // whatever its length, through a gentle low-pass; the felt piano without samples
+            if (!this.sample("grand", n, t, 2.2, vel * GRAND, 0.004, 0.3, 1600)) this.felt(n, t, dur, vel);
+          }
+          spanish(n, t, dur, vel) {
+            // a recorded Spanish classical guitar (FreePats, CC0) ringing a little past its note, or the nylon
+            if (!this.sample("spanish", n, t, dur + 0.4, vel * SPANISH, 0.003, 0.15))
+              this.nylon(n, t, dur, vel);
+          }
+          piano(n, t, dur, vel) {
+            this.fm(n, t, dur, vel * 1.3, 1, 3.5, 0.2); // a piano's low notes, struck hard
+          }
+          gong(t, vel) {
+            // a gong: a low tone with an out-of-tune partial, ringing long over a wash of noise
+            this.ping(98, t, 2.5, 0.3 * vel);
+            this.ping(98 * 2.76, t, 1.5, 0.1 * vel);
+            this.hit(t, 1.8, "bandpass", 1200, 0.12 * vel, 0.01);
+          }
+          bombo(t, vel) {
+            // the bass drum of a gaita band, hit with a mallet: rounder and shorter than the big drum
+            this.thump(t, 100, 55, 0.08, 0.5 * vel, 0.35);
+            this.hit(t, 0.03, "lowpass", 600, 0.15 * vel);
+          }
+          bigdrum(t, vel) {
+            this.thump(t, 85, 38, 0.25, 0.8 * vel, 0.9);
+            this.hit(t, 0.25, "lowpass", 300, 0.35 * vel);
+          }
+        }
+        // The whole song as a list of voice calls, [name, ...arguments] with times from the song's start, for
+        // a player outside Web Audio (the Android app's native engine, native/lofi.c): play() runs
+        // as it does live, but each voice it calls is written down instead of played.
+        function score(sheet, nf = {}) {
+          const rec = Object.create(Player.prototype),
+            out = [];
+          for (const name of Object.getOwnPropertyNames(Player.prototype))
+            if (!["constructor", "play", "schedule"].includes(name))
+              rec[name] = (...args) => out.push([name, ...args.map(Number)]);
+          Object.assign(rec, {
+            s: sheet,
+            loop: LOOPS[sheet.loop] || LOOPS.lazy,
+            sd: 60 / sheet.bpm / 4,
+            nf,
+            cur: 0,
+          });
+          Object.assign(rec, { step: 0, start: 0, stopAt: Infinity });
+          rec.schedule(Infinity);
+          return out;
+        }
+        return {
+          song,
+          score,
+          breathe,
+          phaserRate,
+          sampleLines,
+          reverbIR,
+          regionOf,
+          Player,
+          BANDS,
+          KITS,
+          STYLES,
+          REGIONS,
+          OWN_REGIONS,
+        };
+      })();
+    </script>
+<script>
+"use strict";
+/* Dungeon Town, gauntlet r2 (fable). One file: the world is drawn in code on a small pixel buffer.
+ * Parts: seeded world (build), economy (econ, also used for catch-up), beings (step), drawing (frame), music.
+ * Storage key: dungeon.r2fable.v1 (versioned; missing fields are filled in by load).
+ * Monster names follow the Swords & Wizardry open bestiary roles (Open Game License 1.0a, Section 15:
+ * Swords & Wizardry Core Rules, Copyright 2008, Matthew J. Finch). Music: our own Clockscapes LOFI engine. */
+const ES = (navigator.language || "en").slice(0, 2) === "es";
+const T = (en, es) => ES ? es : en;
+const KEY = "dungeon.r2fable.v1";
+const $ = id => document.getElementById(id);
+const clamp = (v, a, b) => v < a ? a : v > b ? b : v;
+function rng(seed) { let a = seed >>> 0; return () => { a = (a + 0x6D2B79F5) | 0; let t = Math.imul(a ^ (a >>> 15), 1 | a); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }; }
+
+// ---- saved state ----
+let S = { v: 1, seed: (Math.random() * 1e9) | 0, food: 30, gold: 10, hoard: 30, shroom: 30, pop: 5, gob: 4, age: 0, graves: [], chron: [], nudgeAt: 0, last: Date.now(), mute: false };
+try { const o = JSON.parse(localStorage.getItem(KEY)); if (o && o.v === 1 && Number.isFinite(o.seed)) for (const k in S) if (typeof o[k] === typeof S[k]) S[k] = o[k]; } catch (e) {}
+if (!Array.isArray(S.graves)) S.graves = []; if (!Array.isArray(S.chron)) S.chron = [];
+S.graves = S.graves.filter(g => typeof g === "string").slice(-24).map(g => g.slice(0, 20));
+const save = () => { S.last = Date.now(); try { localStorage.setItem(KEY, JSON.stringify(S)); } catch (e) {} };
+const R0 = rng(S.seed);
+const CAST = { // one of each role per run, picked by the seed
+  worker: [["Goblins", "Goblins", [95, 174, 74]], ["Kobolds", "Kobolds", [196, 120, 70]]][(R0() * 2) | 0],
+  lurker: [["Skeleton", "Esqueleto", [226, 222, 200]], ["Ghoul", "Necrófago", [150, 190, 170]], ["Wight", "Tumulario", [170, 170, 230]]][(R0() * 3) | 0],
+  beast: [["bats", [70, 60, 90]], ["rats", [120, 100, 90]]][(R0() * 2) | 0],
+  guard: [["Dragon", "Dragón", [150, 40, 40]], ["Wyvern", "Guiverno", [60, 130, 110]], ["Ogre", "Ogro", [130, 110, 70]]][(R0() * 3) | 0],
+};
+const riverDown = R0() < 0.5;
+const SYL = ["al", "bra", "cor", "dun", "el", "fa", "gri", "hal", "is", "jor", "ka", "lu", "mer", "nor", "os", "per", "ru", "sa", "tor", "ul", "wen", "ya"];
+const nm = () => { const r = Math.random, s = SYL[(r() * 22) | 0] + SYL[(r() * 22) | 0] + (r() < .4 ? SYL[(r() * 22) | 0] : ""); return s[0].toUpperCase() + s.slice(1); };
+const EV = { // the chronicle's voice
+  fell: n => T(n + " went below and did not return.", n + " bajó y no volvió."),
+  famine: () => T("Hunger emptied a house.", "El hambre vació una casa."),
+  born: () => T("A new family lit its window.", "Una familia nueva encendió su ventana."),
+  raid: () => T("The granary was raided at night.", "Saquearon el granero de noche."),
+  loot: n => T(n + " came back heavy with gold.", n + " volvió cargando oro."),
+  wake: () => T("The " + CAST.guard[0] + " woke on its hoard.", "El " + CAST.guard[1] + " despertó sobre su tesoro."),
+  rain: () => T("Rain was called, and the river swelled.", "Se llamó a la lluvia y el río creció."),
+  feast: () => T("A feast! The smell reached the deep.", "¡Un banquete! El olor llegó a lo hondo."),
+  greed: () => T("Gold piled up and the fields were forgotten.", "El oro se amontonó y se olvidaron los campos."),
+};
+const log = (k, n) => { S.chron.push([Date.now(), k, n || ""]); if (S.chron.length > 40) S.chron.shift(); fresh.push(EV[k](n)); };
+let fresh = [];
+
+// ---- economy: one tick is 12 s live; catch-up runs the same ticks with the errands done by dice ----
+let rainT = 0, wakeT = 0;
+function econ(abstract) {
+  const m = new Date().getMonth(), season = m < 2 || m > 10 ? 0.7 : 1, decadent = S.gold > 45;
+  if (decadent && S.gold - 45 < 4 && Math.random() < .3) log("greed");
+  S.food += S.pop * (0.9 * (decadent ? 0.3 : 1) * season + (rainT > 0 ? .3 : 0)) - S.pop * 0.5;
+  S.gold *= 0.96;
+  S.shroom += S.gob * 0.9 - S.gob * S.gob * 0.15 + (rainT > 0 ? 1 : 0);
+  S.hoard += S.gob * 0.5;
+  if (S.food <= 0 && S.pop > 2) { S.pop--; log("famine"); }
+  if (S.food > 55 && S.pop < 9 && Math.random() < .3) { S.pop++; S.food -= 10; log("born"); }
+  if (S.shroom <= 0 && S.gob > 2) S.gob--;
+  if (S.shroom > 50 && S.gob < 9 && Math.random() < .3) { S.gob++; S.shroom -= 10; }
+  if (abstract) {
+    if (S.hoard > 8 && Math.random() < S.pop / 14 * (decadent ? 1.6 : 1)) Math.random() < .25 ? bury(nm()) : (S.gold += 6, S.hoard -= 6);
+    if (S.shroom < 25 && S.food > 6) { S.food -= 6; S.shroom += 6; if (Math.random() < .2) log("raid"); }
+  }
+  for (const k of ["food", "gold", "hoard", "shroom"]) S[k] = clamp(S[k], 0, 100);
+  S.age++;
+}
+function bury(n) { S.graves.push(n); if (S.graves.length > 24) S.graves.shift(); S.pop = Math.max(2, S.pop - (Math.random() < .5 ? 1 : 0)); log("fell", n); }
+{ // catch up on the time away
+  const away = Date.now() - S.last, n = Math.min(1500, Math.floor(away / 12000));
+  if (n > 5) { for (let i = 0; i < n; i++) econ(true); setTimeout(() => showChron(T("While you were away", "Mientras no estabas")), 1500); } else fresh = [];
+}
+
+// ---- the world, rebuilt for the screen from the seed ----
+const cv = $("v"), sx = cv.getContext("2d");
+const buf = document.createElement("canvas"), g = buf.getContext("2d");
+const bg = document.createElement("canvas"), b = bg.getContext("2d");
+const lt = document.createElement("canvas"), l = lt.getContext("2d");
+let W, H, SC, GY, DT, NF, FH, lad, lights, wins, P = {}, beings = [], bats = [];
+const rgb = (c, f = 1) => "rgb(" + ((c[0] * f) | 0) + "," + ((c[1] * f) | 0) + "," + ((c[2] * f) | 0) + ")";
+const footY = f => f === 0 ? GY : DT + f * FH - 3;
+function build() {
+  const sw = innerWidth, sh = innerHeight;
+  SC = Math.max(2, Math.floor(Math.min(sw / 128, sh / 200)));
+  W = Math.ceil(sw / SC); H = Math.ceil(sh / SC);
+  cv.width = sw; cv.height = sh; sx.imageSmoothingEnabled = false;
+  for (const c of [buf, bg, lt]) { c.width = W; c.height = H; }
+  const r = rng(S.seed + 7);
+  GY = Math.round(H * (H > W ? 0.33 : 0.42)); DT = GY + 7;
+  NF = Math.max(2, Math.floor((H - DT) / 30)); FH = Math.floor((H - DT) / NF);
+  lights = []; wins = [];
+  const X = (x, y, w, h, c) => { b.fillStyle = c; b.fillRect(x | 0, y | 0, w, h); };
+  const bricks = (x0, y0, w, h, base, bw, bh, chip) => { // textured masonry: every brick its own tone, mortar, worn pixels
+    b.save(); b.beginPath(); b.rect(x0, y0, w, h); b.clip();
+    X(x0, y0, w, h, rgb(base, .55));
+    for (let y = y0, row = 0; y < y0 + h; y += bh, row++) for (let x = x0 - (row % 2 ? bw >> 1 : 0); x < x0 + w; x += bw) {
+      const f = .8 + r() * .4; X(x + 1, y + 1, bw - 1, bh - 1, rgb(base, f));
+      if (r() < .5) X(x + 1, y + 1, bw - 1, 1, rgb(base, f * 1.18));
+      if (r() < chip) X(x + 1 + ((r() * (bw - 1)) | 0), y + 1 + ((r() * (bh - 1)) | 0), 1, 1, rgb(base, .5));
+    }
+    b.restore();
+  };
+  const noise = (x0, y0, w, h, base, amt) => { for (let y = y0; y < y0 + h; y++) for (let x = x0; x < x0 + w; x++) if (r() < amt) X(x, y, 1, 1, rgb(base, .7 + r() * .6)); };
+  const torch = (x, y) => { X(x, y, 1, 3, "#5a3a1c"); X(x - 1, y, 3, 1, "#77706a"); lights.push({ x, y: y - 2, r: 22, c: [255, 150, 50], fl: 1 }); };
+  // far hills and forest
+  for (let x = 0; x < W; x++) { const hh = 14 + Math.sin(x * .05 + S.seed) * 5 + Math.sin(x * .13) * 3; X(x, GY - hh, 1, hh, "#141c2b"); const t = 7 + Math.sin(x * .7) * 2 + Math.sin(x * .21 + 2) * 3; X(x, GY - t, 1, t, "#10231c"); if (r() < .3) X(x, GY - t + 1 + r() * 3, 1, 1, "#1b3a2a"); }
+  // town street
+  const item = { cem: 16, chapel: 18, house: 24, granary: 26, hall: 30, mouth: 14, smithy: 26, inn: 28, house2: 22, stall: 14 };
+  let order = ["cem", "granary", "hall", "mouth", "smithy"]; const room = W - 14, sum = () => order.reduce((a, k) => a + item[k] + 2, 0);
+  for (const [k, after] of [["chapel", "cem"], ["inn", "smithy"], ["house", "chapel"], ["stall", "hall"], ["house2", "inn"]]) if (sum() + item[k] + 4 <= room && order.includes(after)) order.splice(order.indexOf(after) + 1, 0, k);
+  const gap = Math.min(14, (room - sum()) / order.length); let x = 2 + gap / 2;
+  const win = (x, y, w = 3, h = 4) => { X(x - 1, y - 1, w + 2, h + 2, "#2b1c12"); X(x, y, w, h, "#11131f"); wins.push({ x, y, w, h }); };
+  const roof = (x0, y0, w, h, base) => { for (let i = 0; i < h; i++) { const inset = ((h - 1 - i) * (w / 2 - 2) / h) | 0; for (let xx = x0 + inset - 2; xx < x0 + w - inset + 2; xx++) X(xx, y0 + i, 1, 1, rgb(base, (i % 2 ? .75 : 1) * (.8 + r() * .35) * ((xx + i) % 3 ? 1 : .8))); } };
+  const house = (x0, w, h, roofC, stone) => {
+    const y0 = GY - h;
+    if (stone) bricks(x0, y0, w, h, [112, 108, 104], 5, 3, .3); else { X(x0, y0, w, h, "#b7a47c"); noise(x0, y0, w, h, [170, 150, 112], .35); for (const xx of [x0, x0 + (w >> 1), x0 + w - 1]) X(xx, y0, 1, h, "#3a2416"); X(x0, y0 + (h >> 1), w, 1, "#3a2416"); for (let i = 0; i < (h >> 1); i++) { X(x0 + 1 + i, y0 + i, 1, 1, "#4a2e1c"); X(x0 + w - 2 - i, y0 + i, 1, 1, "#4a2e1c"); } }
+    bricks(x0, GY - 3, w, 3, [86, 84, 90], 4, 2, .2);
+    X(x0 + w - 6, y0 - h * .55 - 3, 3, 7, "#5b3028"); roof(x0, y0 - (h * .55 | 0), w, (h * .55 | 0) + 1, roofC);
+  };
+  for (const k of order) {
+    const w = item[k], x0 = Math.round(x); P[k] = x0 + (w >> 1);
+    if (k === "cem") { for (let i = 0; i < w; i += 3) X(x0 + i, GY - 4, 1, 4, "#2b2a30"); X(x0, GY - 3, w, 1, "#2b2a30"); P.cemX = x0; P.cemW = w; }
+    if (k === "chapel") { house(x0 + 2, w - 4, 18, [70, 74, 92], true); X(x0 + 7, GY - 38, 4, 12, "#6f6c68"); roof(x0 + 5, GY - 44, 8, 6, [70, 74, 92]); X(x0 + 9, GY - 49, 1, 5, "#c9b48a"); X(x0 + 8, GY - 47, 3, 1, "#c9b48a"); win(x0 + 8, GY - 13, 3, 6); X(x0 + 8, GY - 4, 3, 4, "#2b1c12"); }
+    if (k === "house" || k === "house2") { house(x0, w, 15, k === "house" ? [140, 62, 44] : [176, 146, 74], false); win(x0 + 4, GY - 11); win(x0 + w - 8, GY - 11); X(x0 + (w >> 1) - 1, GY - 6, 3, 6, "#2b1c12"); }
+    if (k === "inn") { house(x0, w, 20, [96, 54, 40], false); win(x0 + 4, GY - 17); win(x0 + 12, GY - 17); win(x0 + 20, GY - 17); win(x0 + 4, GY - 8); X(x0 + 13, GY - 7, 4, 7, "#2b1c12"); X(x0 + w, GY - 14, 4, 1, "#3a2416"); X(x0 + w + 1, GY - 13, 3, 3, "#c98a2a"); }
+    if (k === "granary") { house(x0, w, 14, [190, 160, 80], false); X(x0 + 5, GY - 10, w - 10, 10, "#1a120c"); P.granX = x0 + 6; P.granW = w - 12; }
+    if (k === "hall") { house(x0, w, 18, [72, 84, 110], true); const tx = x0 + (w >> 1) - 5; bricks(tx, GY - 44, 10, 30, [120, 116, 112], 5, 3, .3); roof(tx - 1, GY - 52, 12, 8, [72, 84, 110]); X(tx + 5, GY - 56, 1, 4, "#c9b48a"); X(tx + 6, GY - 56, 2, 2, "#a03030"); P.clock = [tx + 5, GY - 37]; win(x0 + 4, GY - 12, 3, 6); win(x0 + w - 7, GY - 12, 3, 6); X(x0 + (w >> 1) - 2, GY - 8, 5, 8, "#2b1c12"); X(x0 + (w >> 1) - 1, GY - 7, 3, 7, "#4a2e1c"); P.goldX = x0 + w - 3; }
+    if (k === "mouth") { bricks(x0, GY - 12, w, 12, [78, 74, 86], 4, 3, .4); X(x0 + 3, GY - 9, w - 6, 9, "#05040a"); X(x0 + 4, GY - 10, w - 8, 1, "#05040a"); for (let i = 0; i < 3; i++) X(x0 + 3 + i * 2, GY - 2 + i, w - 6 - i * 2, 1, "#3a3644"); torch(x0 + 1, GY - 10); torch(x0 + w - 2, GY - 10); }
+    if (k === "smithy") { house(x0, w, 14, [120, 52, 40], true); X(x0 + 4, GY - 9, 9, 9, "#120c0a"); X(x0 + 6, GY - 3, 5, 2, "#e8601c"); lights.push({ x: x0 + 8, y: GY - 4, r: 16, c: [255, 110, 40], fl: 1 }); X(x0 + 17, GY - 4, 5, 1, "#8a8a94"); X(x0 + 18, GY - 3, 3, 3, "#55555e"); win(x0 + 18, GY - 12); }
+    if (k === "stall") { X(x0, GY - 9, 1, 9, "#3a2416"); X(x0 + w - 1, GY - 9, 1, 9, "#3a2416"); for (let i = 0; i < w + 2; i++) X(x0 - 1 + i, GY - 11, 1, 2, i % 4 < 2 ? "#a03030" : "#d8cfae"); X(x0 + 1, GY - 4, w - 2, 4, "#5a3a1c"); for (let i = 2; i < w - 2; i += 2) X(x0 + i, GY - 5, 1, 1, ["#c0392b", "#e8b830", "#5fae4a"][i % 3]); }
+    // a lamp post or a tree in the gap
+    const gx = Math.round(x + w + gap / 2);
+    if (gap > 5) { if (r() < .5) { X(gx, GY - 9, 1, 9, "#2b2a30"); X(gx - 1, GY - 11, 3, 2, "#3a3644"); wins.push({ x: gx, y: GY - 10, w: 1, h: 1, lamp: 1 }); } else { X(gx, GY - 8, 2, 8, "#3a2416"); for (let i = 0; i < 26; i++) X(gx - 5 + r() * 11, GY - 19 + r() * 12, 2, 2, rgb([34, 78, 44], .7 + r() * .6)); } }
+    x += w + 2 + gap;
+  }
+  // grass, soil, stones and roots
+  P.riv = W - 11;
+  for (let xx = 0; xx < W; xx++) { X(xx, GY, 1, 1, rgb([70, 118, 56], .8 + r() * .4)); X(xx, GY + 1, 1, 1, rgb([48, 86, 42], .8 + r() * .4)); if (r() < .25) X(xx, GY - 1, 1, 1, "#4f8a3c"); for (let y = GY + 2; y < DT; y++) X(xx, y, 1, 1, rgb([64, 44, 30], .7 + r() * .5)); if (r() < .12) X(xx, GY + 3 + r() * 3, 2, 1, "#6b6460"); if (r() < .06) X(xx, GY + 2, 1, 4, "#2e1e14"); }
+  // the dungeon: rock mass, back walls, slabs, rooms and their furniture
+  bricks(0, DT, W, H - DT, [52, 50, 70], 8, 4, .5);
+  const x1 = 4, x2 = W - 18; lad = [P.mouth];
+  const kinds = ["store", "library", "cells", "crypt", "shrine", "cells", "store"]; P.farm = null;
+  for (let f = 1; f <= NF; f++) {
+    const top = DT + (f - 1) * FH, fy = footY(f), cave = f === NF;
+    bricks(x1, top, x2 - x1, FH - 3, cave ? [26, 30, 40] : [30, 28, 48], cave ? 7 : 5, 3, .4);
+    bricks(x1 - 2, fy, x2 - x1 + 4, 3, [98, 94, 112], 6, 3, .2); X(x1 - 2, fy, x2 - x1 + 4, 1, "#8c88a4");
+    const n = Math.max(1, Math.round((x2 - x1) / 58)), rw = (x2 - x1) / n;
+    if (f < NF) lad[f] = Math.round(f % 2 ? x1 + 10 + r() * 10 : x2 - 12 - r() * 10);
+    for (let i = 0; i < n; i++) {
+      const rx = Math.round(x1 + i * rw), mid = Math.round(rx + rw / 2);
+      if (i) { bricks(rx - 2, top, 4, FH - 3, [84, 80, 100], 4, 3, .3); X(rx - 4, top, 8, 2, "#54506a"); X(rx - 3, top + 2, 6, 1, "#54506a"); X(rx - 1, fy - 9, 2, 9, "#0a0912"); }
+      X(rx + 1, top, 2, 1, "#8a8a9a55"); X(rx + 1, top + 1, 1, 1, "#8a8a9a55"); // cobweb
+      torch(Math.round(rx + rw * .25), top + 8); if (rw > 50) torch(Math.round(rx + rw * .8), top + 8);
+      for (let c = 0; c < 2; c++) if (r() < .6) { const cx = rx + 6 + r() * (rw - 12), len = 3 + r() * 7; for (let y = 0; y < len; y++) X(cx, top + y, 1, 1, y % 2 ? "#77747f" : "#4a4852"); if (r() < .4) { X(cx - 2, top + len, 5, 5, "#00000000"); for (let q = 0; q < 5; q += 2) X(cx - 2 + q, top + len, 1, 5, "#6a6872"); X(cx - 2, top + len, 5, 1, "#6a6872"); X(cx - 2, top + len + 5, 5, 1, "#6a6872"); } }
+      const kind = cave ? (i === n - 1 ? "hoard" : "cave") : f === 1 && i === 0 ? "farm" : kinds[(r() * kinds.length) | 0];
+      if (kind === "farm") { P.farm = [rx + 6, rw - 12, f]; X(rx + 4, fy - 2, rw - 8, 2, "#2a1c14"); noise(rx + 4, fy - 2, rw - 8, 2, [70, 50, 34], .4); lights.push({ x: mid, y: fy - 4, r: 16, c: [90, 220, 200], fl: 0 }); }
+      if (kind === "hoard") { P.hoard = [mid, f]; lights.push({ x: mid, y: fy - 6, r: 26, c: [255, 200, 80], fl: 0 }); }
+      if (kind === "cave") { for (let q = 0; q < rw; q += 3 + ((r() * 5) | 0)) { const len = 2 + r() * 6; for (let y = 0; y < len; y++) X(rx + q + (y > len / 2 ? 1 : 0), top + y, y > len / 2 ? 1 : 2, 1, "#454a5c"); } for (let q = 0; q < 4; q++) X(rx + 8 + r() * (rw - 16), fy - 1, 2, 1, "#d8d4c0"); }
+      if (kind === "library") { const lx = mid - 8; X(lx, fy - 15, 16, 15, "#3a2416"); for (let row = 0; row < 3; row++) { X(lx + 1, fy - 14 + row * 5, 14, 4, "#160e0a"); for (let q = 0; q < 14; q++) if (r() < .8) X(lx + 1 + q, fy - 13 + row * 5 - (r() < .3 ? 1 : 0), 1, 3, ["#8a3b2a", "#2a5a8a", "#8a7a2a", "#3a7a4a", "#6a3a7a"][(r() * 5) | 0]); } X(lx + 20, fy - 5, 7, 1, "#5a3a1c"); X(lx + 21, fy - 4, 1, 4, "#3a2416"); X(lx + 25, fy - 4, 1, 4, "#3a2416"); X(lx + 23, fy - 7, 1, 2, "#e8dcb8"); lights.push({ x: lx + 23, y: fy - 8, r: 12, c: [255, 200, 110], fl: 1 }); }
+      if (kind === "cells") { const lx = mid - 9; X(lx, fy - 14, 18, 14, "#07060c"); X(lx + 3, fy - 2, 3, 2, "#d8d4c0"); X(lx + 4, fy - 1, 1, 1, "#07060c"); for (let q = 0; q <= 18; q += 3) X(lx + q, fy - 14, 1, 14, "#7a7884"); X(lx, fy - 14, 19, 1, "#7a7884"); X(lx, fy - 7, 19, 1, "#5a5864"); }
+      if (kind === "crypt") { P.crypt = P.crypt || [mid, f]; for (let q = -1; q <= 1; q += 2) { const cx = mid + q * 9; X(cx - 4, fy - 4, 8, 4, "#6a6676"); X(cx - 5, fy - 5, 10, 1, "#8c88a4"); X(cx, fy - 3, 1, 2, "#3a3644"); X(cx - 1, fy - 3, 3, 1, "#3a3644"); } X(mid, fy - 13, 1, 6, "#8c88a4"); X(mid - 2, fy - 11, 5, 1, "#8c88a4"); }
+      if (kind === "store") { for (let q = 0; q < 3; q++) { const cx = rx + 10 + q * 8 + r() * 3; X(cx, fy - 6, 5, 6, "#6a4424"); X(cx, fy - 5, 5, 1, "#8a8a94"); X(cx, fy - 2, 5, 1, "#8a8a94"); X(cx + 1, fy - 6, 3, 1, "#8a5a30"); } X(mid + 8, fy - 5, 6, 5, "#5a3a1c"); X(mid + 8, fy - 5, 6, 1, "#7a5230"); X(mid + 10, fy - 10, 5, 5, "#4a2e1c"); X(mid + 10, fy - 10, 5, 1, "#7a5230"); }
+      if (kind === "shrine") { X(mid - 3, fy - 3, 7, 3, "#6a6676"); X(mid - 2, fy - 11, 5, 8, "#55525f"); X(mid - 1, fy - 14, 3, 3, "#6a6676"); X(mid - 4, fy - 9, 2, 5, "#55525f"); X(mid + 3, fy - 9, 2, 5, "#55525f"); X(mid - 1, fy - 8, 3, 3, "#59e0e8"); lights.push({ x: mid, y: fy - 7, r: 14, c: [80, 220, 240], fl: 0 }); for (const q of [-12, 10]) { X(mid + q, top + 3, 3, 10, "#2a4a8a"); X(mid + q + 1, top + 5, 1, 5, "#c9a84a"); X(mid + q + 1, top + 13, 1, 1, "#2a4a8a"); } }
+    }
+  }
+  if (!P.crypt) P.crypt = [x1 + 30, Math.max(1, NF - 1)];
+  if (!P.farm) P.farm = [x1 + 6, 30, 1];
+  // ladders, and the river's shaft with its pool
+  for (let f = 0; f < NF; f++) { const ya = footY(f) + (f ? 0 : 2), yb = footY(f + 1); X(lad[f] - 2, ya, 5, yb - ya, f ? "#0a091288" : "#05040a"); X(lad[f] - 2, ya - (f ? 6 : 0), 1, yb - ya + (f ? 6 : 0), "#6a4424"); X(lad[f] + 2, ya - (f ? 6 : 0), 1, yb - ya + (f ? 6 : 0), "#6a4424"); for (let y = ya - (f ? 5 : 0); y < yb; y += 2) X(lad[f] - 1, y, 3, 1, "#8a5a30"); }
+  X(P.riv, GY, 7, H - GY, "#070a14"); X(x2 - 30, H - 4, 34 + 8, 4, "#070a14");
+  spawn();
+}
+function spawn() {
+  beings = []; bats = [];
+  for (let i = 0; i < 2; i++) beings.push(mk("animal", Math.random() * (W - 30) + 6, 0));
+  beings.push(mk("lurk", P.crypt[0], P.crypt[1]));
+  for (let i = 0; i < 5; i++) bats.push({ x: Math.random() * W, f: 1 + ((Math.random() * NF) | 0), p: Math.random() * 9 });
+}
+function mk(k, x, f) { return { k, x, f, y: footY(f), tx: x, tf: f, task: "idle", wait: Math.random() * 3, carry: 0, name: k === "gob" ? nm().slice(0, 5) + "k" : nm(), mood: .6, mem: "", say: "", sayT: 0, hue: Math.random() }; }
+const say = (o, s) => { o.say = s; o.sayT = 2.5; };
+const go = (o, x, f, task) => { o.tx = x; o.tf = f; o.task = task; };
+
+// ---- the beings' small lives ----
+function decide(o) {
+  const r = Math.random();
+  if (o.k === "folk") {
+    if (S.gold > 45 && r < .6) { go(o, P.goldX + r * 6 - 6, 0, "count"); o.mem = T("dreams of gold", "sueña con oro"); }
+    else if (r < .5) go(o, P.granX + r * P.granW * 2, 0, "farm");
+    else go(o, 8 + Math.random() * (W - 30), 0, "stroll");
+  } else if (o.k === "gob") {
+    if (wakeT > 0) { go(o, P.farm[0] + r * P.farm[1], P.farm[2], "hide"); say(o, "fear"); }
+    else if (S.shroom < 25 && S.food > 6 && r < .5) raid(o);
+    else if (r < .5) go(o, P.farm[0] + Math.random() * P.farm[1], P.farm[2], "tend");
+    else go(o, 10 + Math.random() * (W - 40), 1 + ((Math.random() * NF) | 0), "dig");
+  } else if (o.k === "lurk") go(o, 10 + Math.random() * (W - 40), P.crypt[1], "haunt");
+  else if (o.k === "animal") go(o, 8 + Math.random() * (W - 30), 0, "stroll");
+}
+const raid = o => { go(o, P.granX + P.granW / 2, 0, "raid"); o.mem = T("is hungry enough to climb", "tiene hambre como para subir"); say(o, "food"); };
+function arrive(o) {
+  o.wait = 2 + Math.random() * 4;
+  const t = o.task; o.task = "idle";
+  if (t === "farm") { say(o, "food"); o.mem = T("carried grain today", "hoy cargó grano"); }
+  if (t === "count") say(o, "gold");
+  if (t === "tend") { say(o, "shroom"); o.mem = T("tends the mushroom beds", "cuida los champiñones"); }
+  if (t === "dig") { say(o, "gold"); S.hoard = Math.min(100, S.hoard + 1); o.mem = T("dug a vein of gold", "cavó una veta de oro"); }
+  if (t === "raid") { if (S.food > 6) { S.food -= 6; o.carry = 2; say(o, "food"); if (Math.random() < .3) log("raid"); fresh = []; } go(o, P.farm[0] + 6, P.farm[2], "home"); o.wait = 1; }
+  if (t === "home") { if (o.carry) S.shroom = Math.min(100, S.shroom + 6); o.carry = 0; say(o, "heart"); o.mem = T("came home with bread", "volvió con pan"); }
+  if (t === "delve") {
+    const lurk = beings.find(q => q.k === "lurk"), near = lurk && lurk.f === o.f && Math.abs(lurk.x - o.x) < 40;
+    if (wakeT > 0 || Math.random() < (near ? .45 : .22) || S.hoard < 6) { say(o, "skull"); o.dead = 1.5; }
+    else { S.hoard -= 6; o.carry = 1; say(o, "gold"); o.mem = T("has seen the hoard", "ha visto el tesoro"); go(o, P.hall, 0, "return"); o.wait = 1.5; }
+  }
+  if (t === "return") { S.gold = Math.min(100, S.gold + 6); say(o, "heart"); log("loot", o.name); fresh = []; o.gone = 1; }
+  if (t === "cross") { o.gone = 1; }
+  if (t === "trade") { if (S.gold >= 8) { S.gold -= 8; S.food = Math.min(100, S.food + 8); say(o, "food"); } else say(o, "no"); go(o, o.dir > 0 ? W + 12 : -12, 0, "cross"); o.wait = 2.5; }
+}
+function step(o, dt) {
+  if (o.sayT > 0) o.sayT -= dt;
+  if (o.dead) { o.dead -= dt; if (o.dead <= 0) { o.gone = 1; if (o.k === "delver") { bury(o.name); fresh = []; } else if (o.k === "gob") S.gob = Math.max(2, S.gob - 1); } return; }
+  if (o.wait > 0) { o.wait -= dt; o.moving = 0; return; }
+  if (o.task === "idle") { decide(o); return; }
+  const sp = (o.k === "lurk" ? 5 : o.k === "gob" ? 13 : o.k === "animal" ? 8 : 10) * dt;
+  const target = o.f === o.tf ? o.tx : lad[o.tf > o.f ? o.f : o.f - 1];
+  o.moving = 1;
+  if (o.climb) { const ty = footY(o.climb.to); o.y += Math.sign(ty - o.y) * sp; if (Math.abs(ty - o.y) <= sp) { o.y = ty; o.f = o.climb.to; o.climb = null; } return; }
+  if (Math.abs(target - o.x) > sp) { o.x += Math.sign(target - o.x) * sp; o.dir = Math.sign(target - o.x); return; }
+  o.x = target;
+  if (o.f !== o.tf) o.climb = { to: o.f + Math.sign(o.tf - o.f) }; else arrive(o);
+}
+function census() { // keep the cast on screen in step with the hidden numbers
+  const count = k => beings.filter(o => o.k === k && !o.gone).length;
+  if (count("folk") < S.pop) beings.push(mk("folk", P.hall, 0));
+  else if (count("folk") > S.pop) { const o = beings.find(q => q.k === "folk" && q !== follow); if (o) o.gone = 1; }
+  if (count("gob") < S.gob) beings.push(mk("gob", P.farm[0] + 5, P.farm[2]));
+  else if (count("gob") > S.gob) { const o = beings.find(q => q.k === "gob" && q !== follow && !q.carry); if (o) o.gone = 1; }
+  beings = beings.filter(o => !o.gone || (o === follow && (follow = null, 0)));
+}
+function sendDelver() { const o = mk("delver", P.inn || P.hall, 0); go(o, P.hoard[0] - 8 + Math.random() * 6, P.hoard[1], "delve"); o.wait = 0; o.mem = T("goes below for gold", "baja a por oro"); say(o, "gold"); beings.push(o); return o; }
+function sendTrader() { const d = Math.random() < .5 ? 1 : -1, o = mk("trader", d > 0 ? -10 : W + 10, 0); o.dir = d; go(o, P.hall + 8, 0, "trade"); o.wait = 0; o.mem = T("trades between cities", "comercia entre ciudades"); beings.push(o); }
+let econT = 6, tradeT = 40, saveT = 5;
+function sim(dt) {
+  for (const o of beings) step(o, dt);
+  if (rainT > 0) rainT -= dt; if (wakeT > 0) wakeT -= dt;
+  if ((econT -= dt) <= 0) {
+    econT = 12; econ(false); fresh = [];
+    const delvers = beings.filter(o => o.k === "delver").length;
+    if (S.hoard > 8 && delvers < 3 && Math.random() < S.pop / 12 * (S.gold > 45 ? 1.6 : 1)) sendDelver();
+    if (Math.random() < .012) wake();
+  }
+  if ((tradeT -= dt) <= 0) { tradeT = 60 + Math.random() * 60; sendTrader(); }
+  if ((saveT -= dt) <= 0) { saveT = 10; save(); }
+  census();
+}
+function wake() { wakeT = 70; log("wake"); fresh = []; }
+
+// ---- drawing ----
+const px = (x, y, w, h, c) => { g.fillStyle = c; g.fillRect(Math.round(x), Math.round(y), w, h); };
+const ICON = { gold: "#f0c030", food: "#d8a060", shroom: "#e05050", skull: "#e8e6d8", heart: "#e85070", fear: "#9a70e0", no: "#808080" };
+function drawBeing(o, t) {
+  const x = Math.round(o.x), y = Math.round(o.y), w = o.moving ? ((t * 6 + o.hue * 9) | 0) % 2 : 0;
+  if (o.dead) { px(x - 2, y - 2, 5, 2, o.k === "gob" ? rgb(CAST.worker[2], .6) : "#8a8a94"); }
+  else if (o.k === "animal") { const c = o.hue < .5 ? "#c9b48a" : "#3a3644"; px(x - 2, y - 3, 4, 2, c); px(x + (o.dir > 0 ? 2 : -3), y - 4, 2, 2, c); px(x - 2 + w, y - 1, 1, 1, c); px(x + 1 - w, y - 1, 1, 1, c); }
+  else if (o.k === "gob") { const c = rgb(CAST.worker[2]); px(x - 1, y - 6, 3, 2, c); px(x - 2, y - 6, 1, 1, c); px(x + 2, y - 6, 1, 1, c); px(x - 1, y - 4, 3, 2, "#5a3a1c"); px(x - 1 + w, y - 2, 1, 2, c); px(x + 1 - w, y - 2, 1, 2 - w, c); px(x, y - 5, 1, 1, "#12060a"); if (o.carry) px(x - 2, y - 5, 2, 2, "#d8a060"); }
+  else if (o.k === "lurk") { const c = rgb(CAST.lurker[2]); px(x - 1, y - 8, 3, 3, c); px(x - 1, y - 7, 1, 1, "#000"); px(x + 1, y - 7, 1, 1, "#000"); px(x, y - 5, 1, 3, c); px(x - 1, y - 4, 3, 1, c); px(x - 1 + w, y - 2, 1, 2, c); px(x + 1 - w, y - 2, 1, 2, c); }
+  else {
+    const tun = o.k === "delver" ? "#6a7a9a" : o.k === "trader" ? "#8a4a8a" : ["#8a3b2a", "#3a6a4a", "#8a7a3a", "#4a5a8a"][(o.hue * 4) | 0];
+    px(x - 1, y - 8, 3, 1, o.k === "delver" ? "#9a9aa4" : "#3a2416"); px(x - 1, y - 7, 3, 2, "#d8a888"); px(x - 1, y - 5, 3, 3, tun); px(x - 1 + w, y - 2, 1, 2, "#2b1c12"); px(x + 1 - w, y - 2, 1, 2 - w, "#2b1c12");
+    if (o.k === "delver") { px(x + 2, y - 7, 1, 4, "#c8c8d0"); px(x - 2, y - 8, 1, 4, "#5a3a1c"); px(x - 2, y - 9, 1, 1, "#ffb040"); if (o.carry) px(x - 2, y - 4, 2, 2, "#f0c030"); }
+    if (o.k === "trader") { const cx = x - o.dir * 7; px(cx - 3, y - 5, 7, 3, "#6a4424"); px(cx - 3, y - 7, 7, 2, "#d8cfae"); px(cx - 2, y - 2, 2, 2, "#2b1c12"); px(cx + 1, y - 2, 2, 2, "#2b1c12"); }
+  }
+  if (o.sayT > 0 && ICON[o.say]) { px(x - 3, y - 17, 7, 6, "#e8e6d8"); px(x - 2, y - 18, 5, 8, "#e8e6d8"); px(x, y - 10, 1, 1, "#e8e6d8"); px(x - 1, y - 16, 3, 4, ICON[o.say]); if (o.say === "skull" || o.say === "fear") { px(x - 1, y - 15, 1, 1, "#000"); px(x + 1, y - 15, 1, 1, "#000"); } if (o.say === "shroom") px(x, y - 14, 1, 2, "#e8dcb8"); }
+}
+function frame(t, night, dt) {
+  // sky: banded, by the device clock
+  const d = new Date(), hr = d.getHours() + d.getMinutes() / 60, alt = -Math.cos(hr / 24 * 2 * Math.PI), day = clamp(alt * 2 + .5, 0, 1), dusk = clamp(1 - Math.abs(alt) * 3, 0, 1);
+  for (let y = 0; y < GY; y += 4) { const k = y / GY, c = [10 + day * (90 + k * 70) + dusk * k * 150, 12 + day * (140 + k * 50) + dusk * k * 60, 30 + day * (200 - k * 10) + k * 14 * (1 - day)]; if (rainT > 0) { c[0] = c[0] * .6 + 20; c[1] = c[1] * .6 + 22; c[2] = c[2] * .6 + 28; } px(0, y, W, 4, rgb(c)); }
+  if (day < .6) { const r = rng(S.seed); for (let i = 0; i < W / 3; i++) { const x = r() * W, y = r() * GY * .7; if (Math.sin(t * (1 + r() * 2) + i) > -.6) px(x, y, 1, 1, "rgba(230,230,255," + (1 - day * 1.6) * (.4 + r() * .6) + ")"); } }
+  const a = (hr - 6) / 12 * Math.PI, bx = W / 2 - Math.cos(day > .5 ? a : a - Math.PI) * W * .42, by = GY * .75 - Math.abs(Math.sin(a)) * GY * .6;
+  if (day > .5) { px(bx - 3, by - 3, 6, 6, "#ffe9a0"); px(bx - 2, by - 4, 4, 8, "#ffe9a0"); px(bx - 4, by - 2, 8, 4, "#ffe9a0"); } else { px(bx - 3, by - 3, 6, 6, "#e8e6c8"); px(bx - 2, by - 4, 4, 8, "#e8e6c8"); px(bx - 4, by - 2, 8, 4, "#e8e6c8"); px(bx - 1, by - 2, 2, 2, "#c4c2a4"); px(bx + 1, by + 1, 2, 1, "#c4c2a4"); }
+  for (let i = 0; i < 4; i++) { const cx = ((t * (1.2 + i * .4) + i * 97) % (W + 60)) - 30, cy = 6 + i * 9 % (GY * .4); g.fillStyle = "rgba(" + (day > .5 ? "240,240,250" : "60,66,96") + "," + (rainT > 0 ? .8 : .45) + ")"; g.fillRect(cx | 0, cy | 0, 18, 3); g.fillRect((cx + 4) | 0, (cy - 2) | 0, 9, 2); g.fillRect((cx + 3) | 0, (cy + 3) | 0, 12, 1); }
+  g.drawImage(bg, 0, 0);
+  // town details that tell the state: lit windows, the clock, sacks, the gold pile, graves
+  let li = 0; for (const w of wins) { const lit = w.lamp ? night > .3 : (li++ < S.pop * wins.length / 9) && night > .2; if (lit) px(w.x, w.y, w.w, w.h, Math.sin(t * 3 + w.x) > .96 ? "#d8a040" : "#ffcf60"); }
+  if (P.clock) { const [cx, cy] = P.clock; px(cx - 3, cy - 4, 7, 9, "#2b1c12"); px(cx - 4, cy - 3, 9, 7, "#2b1c12"); px(cx - 2, cy - 3, 5, 7, "#e8dcb8"); px(cx - 3, cy - 2, 7, 5, "#e8dcb8"); g.strokeStyle = "#17131c"; g.lineWidth = 1; g.beginPath(); const ha = hr / 12 * 2 * Math.PI, ma = d.getMinutes() / 60 * 2 * Math.PI; g.moveTo(cx + .5, cy + .5); g.lineTo(cx + .5 + Math.sin(ha) * 2, cy + .5 - Math.cos(ha) * 2); g.moveTo(cx + .5, cy + .5); g.lineTo(cx + .5 + Math.sin(ma) * 3, cy + .5 - Math.cos(ma) * 3); g.stroke(); }
+  for (let i = 0, n = Math.round(S.food / 100 * 12); i < n; i++) { const col = i % 4, row = (i / 4) | 0; px(P.granX + col * (P.granW / 4) + (row % 2), GY - 3 - row * 3, 3, 3, i % 3 ? "#c9a868" : "#b08c50"); px(P.granX + col * (P.granW / 4) + 1 + (row % 2), GY - 4 - row * 3, 1, 1, "#8a6a3a"); }
+  for (let i = 0, n = Math.round(S.gold / 6); i < n; i++) { const row = Math.floor((Math.sqrt(8 * i + 1) - 1) / 2), col = i - row * (row + 1) / 2, rows = 5; px(P.goldX - rows + (rows - row) + col * 2 - row + row, GY - 1 - (rows - row) + (rows - 1), 2, 1, (i + ((t * 2) | 0)) % 7 ? "#e8b830" : "#fff3a0"); }
+  S.graves.forEach((n, i) => { if (!P.cemW) return; const x = P.cemX + 1 + (i * 4) % (P.cemW - 2), y = GY - ((i * 4 / (P.cemW - 2)) | 0) * 0; px(x, y - 4, 1, 4, "#9a98a4"); px(x - 1, y - 3, 3, 1, "#9a98a4"); });
+  // below: mushrooms, the hoard, the guardian, water
+  for (let i = 0, n = Math.round(S.shroom / 100 * (P.farm[1] / 3)); i < n; i++) { const x = P.farm[0] + (i * 7) % P.farm[1], y = footY(P.farm[2]) - 2, hgt = 1 + (i % 3); px(x, y - hgt, 1, hgt, "#e8dcb8"); px(x - 1, y - hgt - 1, 3, 1, i % 2 ? "#c0392b" : "#59c0b0"); }
+  const [hx, hf] = P.hoard, hy = footY(hf), hh = Math.round(S.hoard / 100 * 9) + 1;
+  for (let r = 0; r < hh; r++) for (let x = -r * 2 - 2; x <= r * 2 + 2; x++) px(hx + x, hy - hh + r, 1, 1, ((x * 7 + r * 13 + ((t * 3) | 0)) % 11 === 0) ? "#fff3a0" : (x + r) % 3 ? "#e8b830" : "#b8861c");
+  const gc = CAST.guard[2], gy = hy - hh, br = Math.sin(t * 1.2) > 0 ? 1 : 0, aw = wakeT > 0;
+  px(hx - 7, gy - 6 - br, 13, 6 + br, rgb(gc)); px(hx - 5, gy - 8 - br, 9, 2, rgb(gc, 1.15)); px(hx - 9, gy - 2, 3, 2, rgb(gc, .8)); px(hx - 11, gy - 1, 3, 1, rgb(gc, .8));
+  px(hx + 5, gy - (aw ? 12 : 7), 6, 5, rgb(gc, 1.1)); px(hx + 9, gy - (aw ? 10 : 5), 3, 2, rgb(gc, .9)); px(hx + 6, gy - (aw ? 14 : 9), 1, 2, "#e8dcb8"); px(hx + 9, gy - (aw ? 14 : 9), 1, 2, "#e8dcb8");
+  px(hx + 8, gy - (aw ? 11 : 6), 2, 1, aw ? "#ffe040" : "#12060a"); for (let i = -5; i < 5; i += 3) px(hx + i, gy - 9 - br, 1, 1, rgb(gc, .6));
+  if (aw) { for (let i = 0; i < 6; i++) px(hx + 12 + i * 2 + Math.random() * 2, gy - 9 + Math.random() * 3 - i * .3, 2, 2, ["#ffe040", "#ff9020", "#e04020"][(Math.random() * 3) | 0]); } else if ((t | 0) % 4 < 2) { px(hx + 12, gy - 12, 2, 1, "#9ab"); px(hx + 14, gy - 15, 3, 1, "#9ab"); }
+  for (let y = GY; y < H - 3; y++) { const ph = riverDown ? y - t * 30 : y + t * 14; for (let x = 1; x < 6; x++) px(P.riv + x, y, 1, 1, ((ph + x * 5) | 0) % 6 < 2 ? "#7fd0e8" : (x + (ph | 0)) % 3 ? "#2a6aa0" : "#3a8ac0"); }
+  for (let x = W - 47; x < W - 5; x++) px(x, H - 3 + (Math.sin(x * .6 + t * 2) > .6 ? 0 : 0), 1, 3, ((x + ((t * 4) | 0)) % 9 === 0) ? "#7fd0e8" : "#2a6aa0");
+  for (let x = 0; x < 14; x++) px(P.riv - 3 + x, GY, 1, 1, ((x + ((t * 4) | 0)) % 5 === 0) ? "#7fd0e8" : "#2a6aa0");
+  for (const o of beings) drawBeing(o, t);
+  for (const q of bats) { q.x += Math.sin(t * .7 + q.p) * 20 * dt + 6 * dt * (q.p > 4 ? 1 : -1); if (q.x < 6) q.x = W - 22; if (q.x > W - 20) q.x = 6; const y = DT + (q.f - 1) * FH + 6 + Math.sin(t * 3 + q.p) * 3, fl = ((t * 8 + q.p) | 0) % 2; if (CAST.beast[0] === "bats") { px(q.x, y, 1, 1, "#1a1424"); px(q.x - 1, y - fl, 1, 1, "#3a2c4c"); px(q.x + 1, y - fl, 1, 1, "#3a2c4c"); } else { const ry = footY(q.f) - 1; px(q.x, ry, 2, 1, rgb(CAST.beast[1])); px(q.x - 1, ry, 1, 1, "#d8a888"); } }
+  if (follow && !follow.gone) { const o = follow; px(o.x - 1, o.y - 21 + (((t * 3) | 0) % 2), 3, 1, "#ffe040"); px(o.x, o.y - 20 + (((t * 3) | 0) % 2), 1, 1, "#ffe040"); }
+  // darkness, with holes cut by every light
+  l.globalCompositeOperation = "source-over"; l.clearRect(0, 0, W, H);
+  l.fillStyle = "rgba(6,8,26," + night * .62 + ")"; l.fillRect(0, 0, W, GY + 2);
+  l.fillStyle = "rgba(3,2,10,.86)"; l.fillRect(0, GY + 2, W, H - GY);
+  l.globalCompositeOperation = "destination-out";
+  const hole = (x, y, r, s) => { const gr = l.createRadialGradient(x, y, 0, x, y, r); gr.addColorStop(0, "rgba(0,0,0," + s + ")"); gr.addColorStop(1, "rgba(0,0,0,0)"); l.fillStyle = gr; l.fillRect(x - r, y - r, r * 2, r * 2); };
+  for (const q of lights) hole(q.x, q.y, q.r * (q.fl ? 1 + Math.sin(t * 9 + q.x) * .06 + Math.random() * .05 : 1 + Math.sin(t + q.x) * .08), .95);
+  for (const o of beings) if (o.k === "delver" || o === follow) hole(o.x, o.y - 5, 18, .9); else if (o.f > 0) hole(o.x, o.y - 4, 7, .35);
+  if (wakeT > 0) hole(hx + 14, gy - 8, 34, 1);
+  li = 0; for (const w of wins) if (w.lamp ? night > .3 : (li++ < S.pop * wins.length / 9)) hole(w.x + 1, w.y + 2, w.lamp ? 14 : 8, .7);
+  g.drawImage(lt, 0, 0);
+  g.globalCompositeOperation = "lighter";
+  for (const q of lights) { const gr = g.createRadialGradient(q.x, q.y, 0, q.x, q.y, q.r * .8); gr.addColorStop(0, "rgba(" + q.c + ",.22)"); gr.addColorStop(1, "rgba(" + q.c + ",0)"); g.fillStyle = gr; g.fillRect(q.x - q.r, q.y - q.r, q.r * 2, q.r * 2); }
+  g.globalCompositeOperation = "source-over";
+  for (const q of lights) if (q.fl) { px(q.x, q.y + 1, 1, 1, "#ffe9a0"); px(q.x + (Math.random() < .5 ? 0 : (Math.random() * 3 - 1) | 0), q.y, 1, 1, "#ff9a3c"); }
+  if (rainT > 0) { g.fillStyle = "rgba(160,190,230,.5)"; for (let i = 0; i < W / 2; i++) { const x = (i * 37 + t * 40) % W, y = (i * 53 + t * 190) % GY; g.fillRect(x | 0, y | 0, 1, 3); } }
+}
+
+// ---- camera, loop, input ----
+let follow = null, cam = { x: 0, y: 0, z: 1 }, last = 0, tagT = 0, hudT = 0;
+const reduce = matchMedia("(prefers-reduced-motion: reduce)").matches;
+function loop(ms) {
+  requestAnimationFrame(loop);
+  const t = ms / 1000, dt = Math.min(.1, t - last || 0); last = t;
+  const d = new Date(), hr = d.getHours() + d.getMinutes() / 60, night = clamp(.5 + Math.cos(hr / 24 * 2 * Math.PI) * 2, 0, 1);
+  sim(dt); frame(t, night, dt);
+  if (follow && follow.gone) setFollow(null);
+  const tz = follow ? 2.4 : 1, tx = follow ? follow.x : W / 2, ty = follow ? follow.y - 6 : H / 2, k = Math.min(1, dt * 3);
+  cam.z += (tz - cam.z) * k; cam.x += (tx - cam.x) * k; cam.y += (ty - cam.y) * k;
+  const z = cam.z, vw = W / z, vh = H / z, cx = clamp(cam.x, vw / 2, W - vw / 2), cy = clamp(cam.y, vh / 2, H - vh / 2);
+  const shake = wakeT > 66 && !reduce ? (Math.random() * 2 - 1) : 0;
+  sx.fillStyle = "#07060c"; sx.fillRect(0, 0, cv.width, cv.height);
+  sx.drawImage(buf, cx - vw / 2 + shake, cy - vh / 2, vw, vh, 0, 0, W * SC, H * SC);
+  cam.cx = cx; cam.cy = cy;
+  if (follow) { tag(follow.name + " · " + roleOf(follow) + (follow.mem ? " · " + follow.mem : ""), 1); }
+  if (tagT > 0 && (tagT -= dt) <= 0) $("tag").classList.remove("on");
+  if (hudT > 0 && (hudT -= dt) <= 0) $("hud").classList.remove("on");
+  $("bFate").classList.toggle("wait", Date.now() - S.nudgeAt < 18e5);
+}
+const roleOf = o => ({ folk: T("townsfolk", "vecino"), delver: T("delver", "aventurero"), trader: T("trader", "mercader"), gob: ES ? CAST.worker[1].slice(0, -1) : CAST.worker[0].slice(0, -1), lurk: T(CAST.lurker[0], CAST.lurker[1]), animal: T("a good dog", "un buen perro") })[o.k];
+function tag(s, secs) { const e = $("tag"); if (e.textContent !== s) e.textContent = s; e.classList.add("on"); tagT = secs; }
+function setFollow(o) { follow = o; if (!o) tagT = .01; music.dirty = 1; }
+function showChron(title) {
+  if (!fresh.length) return;
+  const e = $("chron"); e.textContent = "";
+  const h = document.createElement("b"); h.textContent = title; e.append(h);
+  for (const s of fresh.slice(-6)) { const p = document.createElement("div"); p.textContent = "· " + s; e.append(p); }
+  const c = document.createElement("small"); c.textContent = "Monsters: Swords & Wizardry Core Rules, © 2008 Matthew J. Finch (Open Game License 1.0a). Music: Clockscapes LOFI."; e.append(c);
+  fresh = []; e.classList.add("on"); setTimeout(() => e.classList.remove("on"), 12000);
+}
+cv.addEventListener("pointerdown", e => {
+  startAudio(); $("chron").classList.remove("on");
+  const z = cam.z, vx = cam.cx - W / z / 2 + e.clientX / SC / z, vy = cam.cy - H / z / 2 + e.clientY / SC / z;
+  let best = null, bd = 10;
+  for (const o of beings) { const dd = Math.hypot(o.x - vx, o.y - 4 - vy); if (dd < bd) { bd = dd; best = o; } }
+  if (best) { setFollow(best); return; }
+  if (follow) { setFollow(null); return; }
+  if (P.cemW && S.graves.length && vx >= P.cemX - 3 && vx <= P.cemX + P.cemW + 3 && vy > GY - 12 && vy < GY + 4) { tag(T("Here lie ", "Aquí yacen ") + S.graves.slice(-5).join(", "), 5); return; }
+  $("hud").classList.add("on"); hudT = 6;
+});
+const btn = (id, en, es, fn) => { const e = $(id); e.title = T(en, es); e.setAttribute("aria-label", T(en, es)); e.addEventListener("click", () => { startAudio(); hudT = 6; fn(); }); };
+btn("bHorn", "Horn: send a delver below", "Cuerno: envía un aventurero abajo", () => { const o = sendDelver(); blip(330, 392); tag(T("The horn calls ", "El cuerno llama a ") + o.name, 3); });
+btn("bDrum", "Drum: send the monsters up", "Tambor: sube a los monstruos", () => { let n = 0; for (const o of beings) if (o.k === "gob" && n < 2 && o.task !== "raid" && !o.carry) { raid(o); o.wait = 0; n++; } blip(98, 82); tag(T("The drum wakes the deep", "El tambor despierta lo hondo"), 3); });
+btn("bFate", "Nudge fate (once every 30 minutes)", "Empuja el destino (una vez cada 30 minutos)", () => {
+  const left = 18e5 - (Date.now() - S.nudgeAt);
+  if (left > 0) { tag(T("Fate rests for ", "El destino descansa ") + Math.ceil(left / 6e4) + " min", 3); return; }
+  S.nudgeAt = Date.now(); const r = Math.random();
+  if (r < .4) { rainT = 180; S.shroom = Math.min(100, S.shroom + 20); log("rain"); music.dirty = 1; }
+  else if (r < .75) { S.food = Math.max(0, S.food - 20); log("feast"); for (const o of beings) { if (o.k === "folk") { go(o, P.hall + Math.random() * 20 - 10, 0, "stroll"); say(o, "heart"); } if (o.k === "gob" && Math.random() < .5) raid(o); } }
+  else wake();
+  showChron(T("Fate is nudged", "El destino se mueve")); save();
+});
+btn("bMute", "Sound on or off", "Sonido sí o no", () => { S.mute = !S.mute; applyMute(); save(); });
+
+// ---- music: the Clockscapes engine with two rows of our own, a filter and a drone for the deep ----
+const music = { ctx: null, songs: [], dirty: 0, mood: "" };
+function applyMute() { $("mWave").style.display = S.mute ? "none" : ""; if (music.ctx) music.master.gain.setTargetAtTime(S.mute ? 0 : .8, music.ctx.currentTime, .1); }
+function startAudio() {
+  if (music.ctx) { if (music.ctx.state === "suspended") music.ctx.resume(); return; }
+  try {
+    const AC = window.AudioContext || window.webkitAudioContext, c = music.ctx = new AC();
+    music.master = c.createGain(); music.master.connect(c.destination);
+    music.lp = c.createBiquadFilter(); music.lp.type = "lowpass"; music.lp.frequency.value = 9000; music.lp.connect(music.master);
+    music.bus = c.createGain(); music.bus.gain.value = .9; music.bus.connect(music.lp);
+    music.drone = c.createGain(); music.drone.gain.value = 0; const f = c.createBiquadFilter(); f.type = "lowpass"; f.frequency.value = 260; f.connect(music.drone); music.drone.connect(music.master);
+    for (const hz of [55, 55.4, 82.4, 110.3]) { const o = c.createOscillator(); o.type = "sawtooth"; o.frequency.value = hz; const og = c.createGain(); og.gain.value = .12; o.connect(og); og.connect(f); o.start(); }
+    applyMute(); setInterval(tickMusic, 300); tickMusic();
+  } catch (e) { music.ctx = null; }
+}
+function blip(a, b2) { const c = music.ctx; if (!c || S.mute) return; const o = c.createOscillator(), gn = c.createGain(), t = c.currentTime; o.type = "triangle"; o.frequency.setValueAtTime(a, t); o.frequency.linearRampToValueAtTime(b2, t + .5); gn.gain.setValueAtTime(.0001, t); gn.gain.linearRampToValueAtTime(.25, t + .05); gn.gain.exponentialRampToValueAtTime(.001, t + .9); o.connect(gn); gn.connect(music.master); o.start(t); o.stop(t + 1); }
+function tickMusic() {
+  const c = music.ctx; if (!c || c.state !== "running" || typeof LOFI === "undefined") return;
+  const now = c.currentTime, hr = new Date().getHours(), night = hr < 7 || hr >= 20, below = !!(follow && follow.f > 0);
+  const mood = (night || below ? "dungeon" : "medieval") + (rainT > 0 ? "r" : "") + (wakeT > 0 ? "w" : "");
+  const cur = music.songs[music.songs.length - 1];
+  try {
+    if (!cur || now > cur.end - 8 || mood !== music.mood) {
+      music.mood = mood;
+      if (cur) { const old = cur; old.fadeOut(now, 6); setTimeout(() => { try { old.dispose(); } catch (e) {} music.songs = music.songs.filter(s => s !== old); }, 8000); }
+      const sheet = LOFI.song((S.seed + S.age * 13 + (Date.now() / 1000 | 0)) >>> 0, { night: night || below ? 1 : 0, rain: rainT > 0 ? .7 : 0, thunder: wakeT > 0, region: night || below ? "dungeon" : "medieval", crowd: 0 });
+      music.songs.push(new LOFI.Player(c, music.bus, sheet, now + .1, cur ? 6 : 3));
+    }
+    for (const s of music.songs) s.schedule(now + 1.5);
+  } catch (e) { if (!music.err) { music.err = 1; console.warn("music", e); } }
+  music.lp.frequency.setTargetAtTime(below ? 900 : night ? 3200 : 9000, now, 1.5);
+  music.drone.gain.setTargetAtTime(below ? .5 : night ? .22 : .04, now, 2);
+}
+
+addEventListener("resize", () => { clearTimeout(build.t); build.t = setTimeout(build, 200); });
+addEventListener("pagehide", save);
+document.addEventListener("visibilitychange", () => { if (document.hidden) save(); });
+addEventListener("keydown", e => { const k = e.key.toLowerCase(); if (k === "h") $("bHorn").click(); if (k === "d") $("bDrum").click(); if (k === "f") $("bFate").click(); if (k === "m") $("bMute").click(); if (k === "escape") setFollow(null); });
+build(); applyMute(); requestAnimationFrame(loop);
+if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").catch(() => {});
+</script>
+</body>
+</html>
