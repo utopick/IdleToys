@@ -49,6 +49,12 @@ Not stacked corridors that look alike: a living underground made of **natural ca
 - **Levels change with the cycles:** dug deeper in a boom, flooded, collapsed or abandoned in a fall, resettled later.
 - How many levels show depends on the screen's shape (a phone shows more of them, stacked; a wide screen shows more of each).
 
+## Floors and the frontier
+- **Both sides start equal: two floors each.** The town has two floors above ground (its buildings' storeys and streets), the dungeon two levels below.
+- **Each step of progress adds a floor** to that side: the town builds up and digs cellars and mines down; the monsters dig new levels, up as well as down.
+- **The frontier moves:** as one side grows it **pushes its rival up or down**. A thriving town digs into the top of the dungeon and drives the monsters deeper; a thriving dungeon breaks up into the cellars and the town has to climb, building on top of itself. Over the cycles the line between them swings, and the picture shows who is winning right now.
+- **Building interiors:** the town's buildings can be seen inside, as cutaways like `inspiration/03-dungeon-cross-section.png`: the tavern, the forge, homes, the granary and the vault, with the tiny beings at work in them. The dungeon's rooms are seen the same way.
+
 ## Steering
 - **Send groups:** a horn sends delvers down, a drum sends monsters up.
 - **Nudge fate,** once every 30 minutes: rain, a festival, a feast, wake the guardian... Every nudge **has consequences** that ripple into the cycle.
@@ -59,6 +65,8 @@ Generative (the Clockscapes `LOFI` engine, with its own style rows). The music f
 
 ## A first version must have
 - Both halves, filled with the detail of `inspiration/` (a real town street; a dungeon of caves and rooms), on any screen shape.
+- Two floors per side at the start, at least one new floor appearing from progress, and the frontier visibly moving.
+- Town buildings shown as cutaways with their interiors.
 - At least **three themed levels** that look, sound and live differently, with both caves and rooms, and something visibly moving between levels (food, gold, water, beings).
 - Real time, day and night, and the weather of the picked city (Open-Meteo, working without it too).
 - The gold-for-food loop running visibly, with at least one full cycle swing.
@@ -79,6 +87,7 @@ Don't repeat these.
 - **Only night was ever seen** (round two, all): both rounds ran at night, so day, dusk and rain went untested. Support `?hour=HH` (and `?weather=rain|snow|clear` where weather matters) to force them, and look at day, dusk and night.
 - **Built blind** (round one, all): nobody opened the page. Look at it, more than once.
 - **Hints too faint or stuck** (round one): the first-tap hint was nearly invisible, or never went away.
+- **Hints stuck on screen, the camera hiding a scene, a broken phone frame, finishing early** (round three): see the rules on hints, `?cam=` and looking below, and use all your time to polish.
 - **Features nobody can find** (round two): things built but never seen in a judge's run. Make each one show up on its own while idle at least once in the first minutes.
 - Round one: flat plain colours and empty dirt bands between the floors; music came out as a fife over keys, not dungeon synth.
 - Round two: every floor repeats the same brick and torch pattern (the beings being tiny is fine: it's the place that needs the detail); after 5 minutes the only clear change was a bigger gold pile; no city picker, no real weather, no ages and no rare event seen on screen.
@@ -129,13 +138,15 @@ Dwarf Fortress (depth of the beings' lives), Diablo (a town turned grim), dungeo
 Our own code in `TP/` (read-only: never change the originals; say in the docs what you reused):
 - **The Clockscapes music generator:** `clockscapes/src/app.html`, `<script id="lofi">` (about 130 KB, stands alone). `LOFI.song(seed, mood)` writes a song from a number; `new LOFI.Player(ctx, destination, sheet, start, fadeIn, nf)` plays it (`schedule(until)`, `fadeOut`, `dispose`). Add rows to its `STYLES` for this project's styles. Read its header comment first; leave out `lofi-wasm`. `<script id="lofi-samples">` (CC0 recordings) is optional.
 - **Clockscapes' world code** (same file): `sunPos(ms, lat, lon)` for real sunlight, the Open-Meteo fetch and cache, the screen filters (CRT, VHS...), rain.
-- Find the part you need with `grep`; don't read whole files.
+- Find the part you need with `grep`; don't read whole files. **Never print, Read or echo the music script** (or any other big file) into your output: in round three that got a builder blocked by an API error, twice. Cut it out and splice it into your page with a command (`awk`, `sed` or a short `python3`) without displaying it.
 
 ### How it behaves
 - **Any screen:** it reads well on a phone, a desktop and a TV. Touch first: big targets, no hover, no right click. Keys and a mouse also work.
 - **No HUD, art first:** text only when nothing else can say it, and never while idle.
 - **Idle first, steer not control.**
 - Sound starts on the first tap (browsers block autoplay) and can be muted; the choice is remembered. Start or resume the `AudioContext` on `pointerup` or `click`, **never on `pointerdown`**: on phones a touch's pointerdown doesn't count as a user gesture, so the sound stays silent (found in round two).
+- **Every hint fades on its own** after a few seconds, even if nobody taps (round three left two stuck in the middle of the screen).
+- **Test switches in the address:** `?hour=HH`, `?weather=...` where weather matters, and `?cam=...` to hold the camera on a given view (for example the town, a level, the cockpit, the chase view), so every scene can be looked at on purpose.
 - **Saved data must keep loading** in every later version: version the save, fill in what old saves lack, never renumber or rename what is stored. Storage keys start with this project's name. Wrap storage in try/catch.
 - Anything loaded or fetched is untrusted: check it, and never put text into `innerHTML` unescaped.
 - Respect `prefers-reduced-motion` for flashes and shakes.
@@ -143,7 +154,7 @@ Our own code in `TP/` (read-only: never change the originals; say in the docs wh
 
 ### Working on it
 - The owner's rules apply: commit only as `utopick <310144039+utopick@users.noreply.github.com>` (`git -c user.name=utopick -c user.email=310144039+utopick@users.noreply.github.com commit --author="utopick <310144039+utopick@users.noreply.github.com>"`), never the owner's real name or any other account; a `Co-Authored-By: Claude` trailer is fine. **Ask before anything outward-facing** (pushing, tags, releases, publishing). No temp files in the project; scratch work goes elsewhere. Use they/them for people unless told otherwise.
-- **Look at what you build.** Serve the folder (`python3 -m http.server 8090`, then `http://localhost:8090/`) and take screenshots (headless Chrome) at a phone size (390 x 844), a desktop (1920 x 1080) and after a few minutes of idling. Check the console has no errors. Also look at day, dusk and night with `?hour=`, and check after a tap that the sound really started (the `AudioContext` state is `running`). Every bug in the first round would have been caught by one look.
+- **Look at what you build.** Serve the folder (`python3 -m http.server 8090`, then `http://localhost:8090/`) and take screenshots (headless Chrome) at a phone size (390 x 844), a desktop (1920 x 1080) and after a few minutes of idling. Check the console has no errors. Also look at day, dusk and night with `?hour=`, and check after a tap that the sound really started (the `AudioContext` state is `running`). Look at the **phone** screenshot as closely as the desktop one (round three's civilization showed the map's edge on a phone). Every bug in the first round would have been caught by one look.
 - Keep a `docs/MAINTAINING.md` (how it works inside, what to run) and a `README.md` (what it is, credits), and add tests for the simulation where it can be tested without a screen (`node --test`).
 
 ### Licences and credits

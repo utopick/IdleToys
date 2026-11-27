@@ -66,6 +66,7 @@ Don't repeat these.
 - **Only night was ever seen** (round two, all): both rounds ran at night, so day, dusk and rain went untested. Support `?hour=HH` (and `?weather=rain|snow|clear` where weather matters) to force them, and look at day, dusk and night.
 - **Built blind** (round one, all): nobody opened the page. Look at it, more than once.
 - **Hints too faint or stuck** (round one): the first-tap hint was nearly invisible, or never went away.
+- **Hints stuck on screen, the camera hiding a scene, a broken phone frame, finishing early** (round three): see the rules on hints, `?cam=` and looking below, and use all your time to polish.
 - **Features nobody can find** (round two): things built but never seen in a judge's run. Make each one show up on its own while idle at least once in the first minutes.
 - Round one: soft see-through cloud circles fighting the pixel art; still one village after 90 seconds; the island seen from too far away to see life.
 - Round two: ground in flat single-colour tiles; every forest repeats one tree; roads form a blob; the terrain isn't the real place's map; the inspiration pictures were never opened.
@@ -110,13 +111,15 @@ ActRaiser (a town growing as you watch, seen from above), isometric city builder
 Our own code in `TP/` (read-only: never change the originals; say in the docs what you reused):
 - **The Clockscapes music generator:** `clockscapes/src/app.html`, `<script id="lofi">` (about 130 KB, stands alone). `LOFI.song(seed, mood)` writes a song from a number; `new LOFI.Player(ctx, destination, sheet, start, fadeIn, nf)` plays it (`schedule(until)`, `fadeOut`, `dispose`). Add rows to its `STYLES` for this project's styles. Read its header comment first; leave out `lofi-wasm`. `<script id="lofi-samples">` (CC0 recordings) is optional.
 - **Clockscapes' world code** (same file): `sunPos(ms, lat, lon)` for real sunlight, the Open-Meteo fetch and cache, the screen filters (CRT, VHS...), rain.
-- Find the part you need with `grep`; don't read whole files.
+- Find the part you need with `grep`; don't read whole files. **Never print, Read or echo the music script** (or any other big file) into your output: in round three that got a builder blocked by an API error, twice. Cut it out and splice it into your page with a command (`awk`, `sed` or a short `python3`) without displaying it.
 
 ### How it behaves
 - **Any screen:** it reads well on a phone, a desktop and a TV. Touch first: big targets, no hover, no right click. Keys and a mouse also work.
 - **No HUD, art first:** text only when nothing else can say it, and never while idle.
 - **Idle first, steer not control.**
 - Sound starts on the first tap (browsers block autoplay) and can be muted; the choice is remembered. Start or resume the `AudioContext` on `pointerup` or `click`, **never on `pointerdown`**: on phones a touch's pointerdown doesn't count as a user gesture, so the sound stays silent (found in round two).
+- **Every hint fades on its own** after a few seconds, even if nobody taps (round three left two stuck in the middle of the screen).
+- **Test switches in the address:** `?hour=HH`, `?weather=...` where weather matters, and `?cam=...` to hold the camera on a given view (for example the town, a level, the cockpit, the chase view), so every scene can be looked at on purpose.
 - **Saved data must keep loading** in every later version: version the save, fill in what old saves lack, never renumber or rename what is stored. Storage keys start with this project's name. Wrap storage in try/catch.
 - Anything loaded or fetched is untrusted: check it, and never put text into `innerHTML` unescaped.
 - Respect `prefers-reduced-motion` for flashes and shakes.
@@ -124,7 +127,7 @@ Our own code in `TP/` (read-only: never change the originals; say in the docs wh
 
 ### Working on it
 - The owner's rules apply: commit only as `utopick <310144039+utopick@users.noreply.github.com>` (`git -c user.name=utopick -c user.email=310144039+utopick@users.noreply.github.com commit --author="utopick <310144039+utopick@users.noreply.github.com>"`), never the owner's real name or any other account; a `Co-Authored-By: Claude` trailer is fine. **Ask before anything outward-facing** (pushing, tags, releases, publishing). No temp files in the project; scratch work goes elsewhere. Use they/them for people unless told otherwise.
-- **Look at what you build.** Serve the folder (`python3 -m http.server 8090`, then `http://localhost:8090/`) and take screenshots (headless Chrome) at a phone size (390 x 844), a desktop (1920 x 1080) and after a few minutes of idling. Check the console has no errors. Also look at day, dusk and night with `?hour=`, and check after a tap that the sound really started (the `AudioContext` state is `running`). Every bug in the first round would have been caught by one look.
+- **Look at what you build.** Serve the folder (`python3 -m http.server 8090`, then `http://localhost:8090/`) and take screenshots (headless Chrome) at a phone size (390 x 844), a desktop (1920 x 1080) and after a few minutes of idling. Check the console has no errors. Also look at day, dusk and night with `?hour=`, and check after a tap that the sound really started (the `AudioContext` state is `running`). Look at the **phone** screenshot as closely as the desktop one (round three's civilization showed the map's edge on a phone). Every bug in the first round would have been caught by one look.
 - Keep a `docs/MAINTAINING.md` (how it works inside, what to run) and a `README.md` (what it is, credits), and add tests for the simulation where it can be tested without a screen (`node --test`).
 
 ### Licences and credits
