@@ -2,6 +2,8 @@
 
 Small idle toys, one folder per idea. Some may become apps of their own, some may end up inside other apps.
 
+You can play them in the browser at https://utopick.github.io/IdleToys/, where each toy has its best version so far and a button for every round, so you can see how it grew.
+
 ## Shared principles
 - **Steer, don't control.** Each toy runs on its own. The player can nudge events at any time, but never drives them directly.
 - **No HUD, art first.** Text only when there is no other way to convey the information.
