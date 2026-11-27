@@ -155,6 +155,12 @@ Our own code in `TP/` (read-only: never change the originals; say in the docs wh
 ### Working on it
 - The owner's rules apply: commit only as `utopick <310144039+utopick@users.noreply.github.com>` (`git -c user.name=utopick -c user.email=310144039+utopick@users.noreply.github.com commit --author="utopick <310144039+utopick@users.noreply.github.com>"`), never the owner's real name or any other account; a `Co-Authored-By: Claude` trailer is fine. **Ask before anything outward-facing** (pushing, tags, releases, publishing). No temp files in the project; scratch work goes elsewhere. Use they/them for people unless told otherwise.
 - **Look at what you build.** Serve the folder (`python3 -m http.server 8090`, then `http://localhost:8090/`) and take screenshots (headless Chrome) at a phone size (390 x 844), a desktop (1920 x 1080) and after a few minutes of idling. Check the console has no errors. Also look at day, dusk and night with `?hour=`, and check after a tap that the sound really started (the `AudioContext` state is `running`). Look at the **phone** screenshot as closely as the desktop one (round three's civilization showed the map's edge on a phone). Every bug in the first round would have been caught by one look.
+- **Explain how its systems work** in `docs/SYSTEMS.md`, one section per system (the gold-for-food loop, a being's needs and moods, the cycle (boom, collapse, rebuild, point of no return), the floors and the frontier, a nudge of fate and its consequences, the catch-up on return). Each section has:
+  - a **Mermaid diagram** (GitHub draws them): a `flowchart` for loops and flows, a `stateDiagram-v2` for a being's or a system's states, a `sequenceDiagram` for what happens after a tap;
+  - the **rules in numbers** (rates, thresholds, timings, chances), named as they are in the code;
+  - a **worked example**: a short, concrete run through it, step by step (for example "a goblin with hunger 80 at night: it climbs, finds the granary at 40, takes 3 food, meets a delver, ...");
+  - where it lives in the code.
+  Keep it true: update it whenever the system changes.
 - Keep a `docs/MAINTAINING.md` (how it works inside, what to run) and a `README.md` (what it is, credits), and add tests for the simulation where it can be tested without a screen (`node --test`).
 
 ### Licences and credits

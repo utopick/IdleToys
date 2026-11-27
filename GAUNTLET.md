@@ -14,6 +14,7 @@ idletoys/<idea>/gauntlet/<round>-<model>/
   sw.js                 PWA (offline cache)
   icon.svg              optional; or an icon drawn inside the manifest/page
   NOTES.md              what it is, how to play, what's next
+  docs/SYSTEMS.md       how each system works: Mermaid diagrams, numbers, a worked example
 ```
 `<idea>` is `dungeon`, `civilization` or `drive`. `<round>` is the round's name (`r2`, `r3`...) and `<model>` is a short lowercase name (for example `opus`, `gpt`, `fable`). Round one used plain `<model>` folders.
 
@@ -47,6 +48,9 @@ Budget your 30 minutes: find the part you need with `grep` and copy it; don't re
 ```
 python3 -c "import re,sys;s=open('clockscapes/src/app.html').read();open(sys.argv[1],'w').write(re.search(r'<script id=\"lofi\">.*?</script>',s,re.S).group(0))" /tmp/lofi.html
 ```
+
+## docs/SYSTEMS.md
+As the brief asks under *Working on it*: one section per system, each with a Mermaid diagram, its rules in numbers and a worked example. Keep it short but true; it counts towards *Room to grow*.
 
 ## NOTES.md (write it before time runs out)
 - One line: what it is.
