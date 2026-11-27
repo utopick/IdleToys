@@ -18,7 +18,7 @@ The target is the detail of **Psygnosis games on the PlayStation** (mid-90s): ri
 - **Light makes the mood:** coloured light sources (torches, windows, neon, the sun) tint what is near them, with soft glows, deep shadows and ambient light that follows the hour.
 - **Depth:** several layers, with parallax or atmospheric fade, and foreground details framing the scene.
 - **Nothing visibly repeats:** variants of every tile and prop, mixed and decorated, so a wall or a forest never reads as a stamp.
-- **Readable life:** beings big enough to show what they are doing, with animation frames (walk, work, idle, a reaction).
+- **Tiny, cute beings in a detailed world:** people, monsters and animals stay small and simple (they look cute that way), with a few animation frames (walk, work, idle, a reaction). The PSX detail goes into the **environment**: the places, buildings, materials and light.
 - A higher internal resolution than the first rounds (around **640 x 360**, scaled up crisply) to carry the detail.
 
 ## The world

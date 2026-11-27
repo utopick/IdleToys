@@ -13,12 +13,12 @@ You're a messenger driving packages between real cities, on real roads, in real 
 5. **One palette per moment:** night is night everywhere on screen (no bright green grass at midnight).
 
 ## Art direction: PSX-era detail
-The target is the detail of **Psygnosis games on the PlayStation** (mid-90s): rich, rendered-looking pixel art, not flat retro shapes.
+The target is the detail of **Psygnosis games on the PlayStation** (mid-90s): rich, rendered-looking pixel art, not flat retro shapes. For Drive, the reference pictures in `inspiration/` set the bar.
 - **Many shades per material:** stone, wood, metal, skin and cloth each have highlights, mid-tones, shadows, texture and worn edges; dithering where it helps.
 - **Light makes the mood:** coloured light sources (torches, windows, neon, the sun) tint what is near them, with soft glows, deep shadows and ambient light that follows the hour.
 - **Depth:** several layers, with parallax or atmospheric fade, and foreground details framing the scene.
 - **Nothing visibly repeats:** variants of every tile and prop, mixed and decorated, so a wall or a forest never reads as a stamp.
-- **Readable life:** beings big enough to show what they are doing, with animation frames (walk, work, idle, a reaction).
+- **Ramped up considerably:** this toy needs the most detail of the three. The cockpit and everything through the windscreen (skyline, road, barriers, lamps, signs, cars, sky) should match the density of the reference pictures, pixel for pixel: every dial, switch, vent, stitch and reflection drawn, a city with thousands of lit windows, neon signs and layered depth. Cars and the driver are drawn with the same care.
 - A higher internal resolution than the first rounds (around **640 x 360**, scaled up crisply) to carry the detail.
 
 ## The world

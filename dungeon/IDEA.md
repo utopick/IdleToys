@@ -10,7 +10,7 @@ A town on the surface and a dungeon beneath it, in one picture. The citizens wan
 2. **No HUD, art first.** No numbers on screen. The state of the world is read from the scene: piles of gold, a full or empty granary, hungry goblins, a town in decay. Text only when nothing else can say it.
 3. **Idle first.** Lovely to leave running for hours. The player steers, never controls.
 4. **Bittersweet.** Beings can die and are remembered. The cycle mourns and goes on.
-5. **Detailed, gritty pixel art at PSX level** (see *Art direction*): textured stone, mortar, worn edges, darkness lit by torches and windows. Beings about 16 x 24 px, big monsters 32 to 48 px (this replaces the earlier 8x8 limit).
+5. **Detailed, gritty pixel art at PSX level** (see *Art direction*): textured stone, mortar, worn edges, darkness lit by torches and windows. The detail is in the **place itself**; the beings stay tiny and cute: 8 x 8 at most, big monsters 16 x 16.
 
 ## Art direction: PSX-era detail
 The target is the detail of **Psygnosis games on the PlayStation** (mid-90s): rich, rendered-looking pixel art, not flat retro shapes.
@@ -18,7 +18,7 @@ The target is the detail of **Psygnosis games on the PlayStation** (mid-90s): ri
 - **Light makes the mood:** coloured light sources (torches, windows, neon, the sun) tint what is near them, with soft glows, deep shadows and ambient light that follows the hour.
 - **Depth:** several layers, with parallax or atmospheric fade, and foreground details framing the scene.
 - **Nothing visibly repeats:** variants of every tile and prop, mixed and decorated, so a wall or a forest never reads as a stamp.
-- **Readable life:** beings big enough to show what they are doing, with animation frames (walk, work, idle, a reaction).
+- **Tiny, cute beings in a detailed world:** people, monsters and animals stay small and simple (they look cute that way), with a few animation frames (walk, work, idle, a reaction). The PSX detail goes into the **environment**: the places, buildings, materials and light.
 - A higher internal resolution than the first rounds (around **640 x 360**, scaled up crisply) to carry the detail.
 
 ## The world
@@ -80,7 +80,7 @@ Don't repeat these.
 - **Hints too faint or stuck** (round one): the first-tap hint was nearly invisible, or never went away.
 - **Features nobody can find** (round two): things built but never seen in a judge's run. Make each one show up on its own while idle at least once in the first minutes.
 - Round one: flat plain colours and empty dirt bands between the floors; music came out as a fife over keys, not dungeon synth.
-- Round two: every floor repeats the same brick and torch pattern; the beings are tiny against the scene; after 5 minutes the only clear change was a bigger gold pile; no city picker, no real weather, no ages and no rare event seen on screen.
+- Round two: every floor repeats the same brick and torch pattern (the beings being tiny is fine: it's the place that needs the detail); after 5 minutes the only clear change was a bigger gold pile; no city picker, no real weather, no ages and no rare event seen on screen.
 
 ## Done means
 It runs in one `index.html` (PWA, offline), with no console errors, and you'd happily leave it on a second screen all evening.
