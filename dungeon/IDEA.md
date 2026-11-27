@@ -47,13 +47,14 @@ Not stacked corridors that look alike: a living underground made of **natural ca
   5. **The hoard:** deep, warm, gold glinting, the guardian asleep.
 - **The levels feed each other:** mushrooms feed the workers, the workers feed the beasts, the river carries food and waste down, gold travels up, town food travels down. Each level has its own small balance inside the big one.
 - **Levels change with the cycles:** dug deeper in a boom, flooded, collapsed or abandoned in a fall, resettled later.
-- How many levels show depends on the screen's shape (a phone shows more of them, stacked; a wide screen shows more of each).
+- How much of the growth fits depends on the screen's shape (a phone shows a tall stack; a wide screen shows wider floors).
 
-## Floors and the frontier
-- **Both sides start equal: two floors each.** The town has two floors above ground (its buildings' storeys and streets), the dungeon two levels below.
-- **Each step of progress adds a floor** to that side: the town builds up and digs cellars and mines down; the monsters dig new levels, up as well as down.
-- **The frontier moves:** as one side grows it **pushes its rival up or down**. A thriving town digs into the top of the dungeon and drives the monsters deeper; a thriving dungeon breaks up into the cellars and the town has to climb, building on top of itself. Over the cycles the line between them swings, and the picture shows who is winning right now.
-- **Building interiors:** the town's buildings can be seen inside, as cutaways like `inspiration/03-dungeon-cross-section.png`: the tavern, the forge, homes, the granary and the vault, with the tiny beings at work in them. The dungeon's rooms are seen the same way.
+## Floors and growth
+- **It starts small, in the middle of the screen.** The ground line sits at the centre. Above it, a small town of **two floors**; below it, a small dungeon of **two levels**. The rest is open sky above and solid rock below: never a screen that is all dungeon and no surface.
+- **Both sides grow room by room, over time.** The town builds **up**, a room or a storey at a time (a new workshop, a tower floor, a bridge between houses). The monsters mine **down**, a room or a cave at a time (a new chamber, a tunnel, a shaft). Each step of progress is one new room you can watch appear: scaffolding going up, rock being dug out.
+- **Growth pushes the rival.** The picture keeps both sides in view, so as one side grows it takes more of the screen and **pushes the other up or down**: a dungeon that keeps digging pushes the town up towards the top of the screen; a town that keeps building pushes the dungeon down. The ground line's position shows at a glance who is ahead.
+- **In a fall,** rooms are abandoned, collapse or flood, and that side shrinks back; the cycle swings the line the other way.
+- **Building interiors:** the town's buildings are seen inside, as cutaways like `inspiration/03-dungeon-cross-section.png`: the tavern, the forge, homes, the granary and the vault, with the tiny beings at work in them. The dungeon's rooms and caves are seen the same way.
 
 ## Steering
 - **Send groups:** a horn sends delvers down, a drum sends monsters up.
@@ -65,7 +66,8 @@ Generative (the Clockscapes `LOFI` engine, with its own style rows). The music f
 
 ## A first version must have
 - Both halves, filled with the detail of `inspiration/` (a real town street; a dungeon of caves and rooms), on any screen shape.
-- Two floors per side at the start, at least one new floor appearing from progress, and the frontier visibly moving.
+- The start: the ground line at the centre, two town floors above, two dungeon levels below, open sky and solid rock around them.
+- Rooms added one at a time on both sides as they progress (up for the town, down for the dungeon), and the ground line moving up or down on screen as one side outgrows the other.
 - Town buildings shown as cutaways with their interiors.
 - At least **three themed levels** that look, sound and live differently, with both caves and rooms, and something visibly moving between levels (food, gold, water, beings).
 - Real time, day and night, and the weather of the picked city (Open-Meteo, working without it too).
@@ -155,7 +157,7 @@ Our own code in `TP/` (read-only: never change the originals; say in the docs wh
 ### Working on it
 - The owner's rules apply: commit only as `utopick <310144039+utopick@users.noreply.github.com>` (`git -c user.name=utopick -c user.email=310144039+utopick@users.noreply.github.com commit --author="utopick <310144039+utopick@users.noreply.github.com>"`), never the owner's real name or any other account; a `Co-Authored-By: Claude` trailer is fine. **Ask before anything outward-facing** (pushing, tags, releases, publishing). No temp files in the project; scratch work goes elsewhere. Use they/them for people unless told otherwise.
 - **Look at what you build.** Serve the folder (`python3 -m http.server 8090`, then `http://localhost:8090/`) and take screenshots (headless Chrome) at a phone size (390 x 844), a desktop (1920 x 1080) and after a few minutes of idling. Check the console has no errors. Also look at day, dusk and night with `?hour=`, and check after a tap that the sound really started (the `AudioContext` state is `running`). Look at the **phone** screenshot as closely as the desktop one (round three's civilization showed the map's edge on a phone). Every bug in the first round would have been caught by one look.
-- **Explain how its systems work** in `docs/SYSTEMS.md`, one section per system (the gold-for-food loop, a being's needs and moods, the cycle (boom, collapse, rebuild, point of no return), the floors and the frontier, a nudge of fate and its consequences, the catch-up on return). Each section has:
+- **Explain how its systems work** in `docs/SYSTEMS.md`, one section per system (the gold-for-food loop, a being's needs and moods, the cycle (boom, collapse, rebuild, point of no return), growth room by room and the moving ground line, a nudge of fate and its consequences, the catch-up on return). Each section has:
   - a **Mermaid diagram** (GitHub draws them): a `flowchart` for loops and flows, a `stateDiagram-v2` for a being's or a system's states, a `sequenceDiagram` for what happens after a tap;
   - the **rules in numbers** (rates, thresholds, timings, chances), named as they are in the code;
   - a **worked example**: a short, concrete run through it, step by step (for example "a goblin with hunger 80 at night: it climbs, finds the granary at 40, takes 3 food, meets a delver, ...");
