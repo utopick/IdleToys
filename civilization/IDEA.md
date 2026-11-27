@@ -19,6 +19,7 @@ The target is the detail of **Psygnosis games on the PlayStation** (mid-90s): ri
 - **Depth:** several layers, with parallax or atmospheric fade, and foreground details framing the scene.
 - **Nothing visibly repeats:** variants of every tile and prop, mixed and decorated, so a wall or a forest never reads as a stamp.
 - **Tiny, cute beings in a detailed world:** people, monsters and animals stay small and simple (they look cute that way), with a few animation frames (walk, work, idle, a reaction). The PSX detail goes into the **environment**: the places, buildings, materials and light.
+- **Variety among the beings:** small doesn't mean identical. Vary colours (skin, hair, clothes, cloaks, armour, fur, scales) and shapes (height, build, hats and hoods, beards, weapons, tools, packs, ears, horns, tails) so that people, adventurers and monsters each look like individuals in a crowd. Build them from mixable parts or palette swaps in the art sheets, picked by the seed.
 - A higher internal resolution than the first rounds (around **640 x 360**, scaled up crisply) to carry the detail.
 
 ## The world
