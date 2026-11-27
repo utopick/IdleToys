@@ -9,8 +9,17 @@ You're a messenger driving packages between real cities, on real roads, in real 
 1. **Steer, don't control.** No real driving: indicators ask for a lane change or a turn, the pedal sets the pace, a button stops. The car does the rest.
 2. **When idle, no HUD:** just music and driving. Information (speed, route, time and distance left) fades in when touched and fades out again.
 3. **Real:** real routes, real distances, real time, the real light and weather where the car is.
-4. **The cockpit is the star:** see `inspiration/01-cockpit-night.png` and `02-cockpit-dusk.png`. A rich, lit dashboard filling the lower third; the driver's hands in fingerless gloves on the wheel.
+4. **The cockpit is the star, at PSX level** (see *Art direction*): see `inspiration/01-cockpit-night.png` and `02-cockpit-dusk.png`. A rich, lit dashboard filling the lower third; the driver's hands in fingerless gloves on the wheel.
 5. **One palette per moment:** night is night everywhere on screen (no bright green grass at midnight).
+
+## Art direction: PSX-era detail
+The target is the detail of **Psygnosis games on the PlayStation** (mid-90s): rich, rendered-looking pixel art, not flat retro shapes.
+- **Many shades per material:** stone, wood, metal, skin and cloth each have highlights, mid-tones, shadows, texture and worn edges; dithering where it helps.
+- **Light makes the mood:** coloured light sources (torches, windows, neon, the sun) tint what is near them, with soft glows, deep shadows and ambient light that follows the hour.
+- **Depth:** several layers, with parallax or atmospheric fade, and foreground details framing the scene.
+- **Nothing visibly repeats:** variants of every tile and prop, mixed and decorated, so a wall or a forest never reads as a stamp.
+- **Readable life:** beings big enough to show what they are doing, with animation frames (walk, work, idle, a reaction).
+- A higher internal resolution than the first rounds (around **640 x 360**, scaled up crisply) to carry the detail.
 
 ## The world
 - **Roads:** Natural Earth's 10m roads, preprocessed into a compact graph baked into the page; routes found offline. The real route and distances; generated curves, hills and scenery.
@@ -44,8 +53,18 @@ The radio: local stations in the style of the region you're crossing (Clockscape
 ## Free to invent
 The cars, the dashboards, the stops, the easter eggs, what the packages are, the scenery of each region, the camera moves, small moments on the road.
 
-## Not wanted (seen in the first round)
+## Not wanted
 Colours that ignore the time of day; shapes that don't read (hands as red squares); so many buttons that it becomes a control panel.
+
+## Known bugs and lessons (rounds one and two)
+Don't repeat these.
+- **Silent on phones** (round two, dungeon and civilization): the sound was started on `pointerdown`, which a phone's touch doesn't count as a user gesture. Start it on `pointerup` or `click`.
+- **Only night was ever seen** (round two, all): both rounds ran at night, so day, dusk and rain went untested. Support `?hour=HH` (and `?weather=rain|snow|clear` where weather matters) to force them, and look at day, dusk and night.
+- **Built blind** (round one, all): nobody opened the page. Look at it, more than once.
+- **Hints too faint or stuck** (round one): the first-tap hint was nearly invisible, or never went away.
+- **Features nobody can find** (round two): things built but never seen in a judge's run. Make each one show up on its own while idle at least once in the first minutes.
+- Round one: bright green grass under a night sky; the hands read as two red squares; eight buttons made it a control panel.
+- Round two: the road graph was 28 cities typed from memory, not baked from Natural Earth; only the night scene was ever seen (day, dusk, rain and the driver outside are unchecked).
 
 ## Done means
 It runs in one `index.html` (PWA, offline, with the road graph inside), with no console errors, and you could leave it driving on a TV all night.
@@ -73,8 +92,14 @@ Road Avenger's cockpit view (inspiration only), OutRun's superscaler road, Euro 
 ## Rules
 
 ### What it is made of
-- **One `index.html`** holds everything: HTML, CSS, JavaScript, the pixel art (drawn in code or stored as data in the file) and the sound (Web Audio). No build step, no framework, no dependencies.
-- Beside it, only what a **PWA** needs: `manifest.webmanifest`, `sw.js` (offline cache) and `icons/`. It installs and runs offline after the first visit.
+- **Code in one `index.html`:** HTML, CSS, JavaScript and the sound (Web Audio). No build step, no framework, no dependencies.
+- **Graphics in separate files, in `art/`,** so they can be improved on their own without touching the code:
+  - PNG sprite sheets and tilesets (`art/<name>.png`), each with a small JSON beside it (`art/<name>.json`) listing its frames: name, x, y, w, h, anchor, and animations (frames and speed).
+  - `art/index.json` lists every sheet. The code loads that list at start and draws only from it. Nothing graphical is hard-coded in the script beyond effects (light, glow, rain, particles, fades, screen filters).
+  - Replacing a PNG with a better one of the same layout needs **no code change**. A missing or broken sheet must not crash: draw a plain placeholder and log one warning.
+  - How the art is made is free (drawn, painted, or generated by a script). If a script generates it, keep the script in `tools/` so it can be run again, and keep its output in `art/`.
+  - Total art under about 5 MB.
+- Beside them, what a **PWA** needs: `manifest.webmanifest`, `sw.js` (it caches `index.html` and every file listed in `art/index.json`) and `icons/`. It installs and runs offline after the first visit.
 - **Network:** Allowed: real weather from `https://api.open-meteo.com` along the route (cache it; the toy must work fully without it). The road graph is **baked into the page**, never fetched. Nothing else.
 - **Only free and open fonts and code** (SIL OFL, MIT, LGPL, CC0...), credited in the page. No web fonts loaded from outside: embed them or draw the letters.
 - **Original art only.** The pictures in `inspiration/` and the games named below are mood references: never copy, trace or ship them, and no characters, logos or scenes from existing works.
@@ -97,7 +122,7 @@ Our own code in `TP/` (read-only: never change the originals; say in the docs wh
 
 ### Working on it
 - The owner's rules apply: commit only as `utopick <310144039+utopick@users.noreply.github.com>` (`git -c user.name=utopick -c user.email=310144039+utopick@users.noreply.github.com commit --author="utopick <310144039+utopick@users.noreply.github.com>"`), never the owner's real name or any other account; a `Co-Authored-By: Claude` trailer is fine. **Ask before anything outward-facing** (pushing, tags, releases, publishing). No temp files in the project; scratch work goes elsewhere. Use they/them for people unless told otherwise.
-- **Look at what you build.** Serve the folder (`python3 -m http.server 8090`, then `http://localhost:8090/`) and take screenshots (headless Chrome) at a phone size (390 x 844), a desktop (1920 x 1080) and after a few minutes of idling. Check the console has no errors. Every bug in the first round would have been caught by one look.
+- **Look at what you build.** Serve the folder (`python3 -m http.server 8090`, then `http://localhost:8090/`) and take screenshots (headless Chrome) at a phone size (390 x 844), a desktop (1920 x 1080) and after a few minutes of idling. Check the console has no errors. Also look at day, dusk and night with `?hour=`, and check after a tap that the sound really started (the `AudioContext` state is `running`). Every bug in the first round would have been caught by one look.
 - Keep a `docs/MAINTAINING.md` (how it works inside, what to run) and a `README.md` (what it is, credits), and add tests for the simulation where it can be tested without a screen (`node --test`).
 
 ### Licences and credits

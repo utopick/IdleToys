@@ -10,7 +10,16 @@ A town on the surface and a dungeon beneath it, in one picture. The citizens wan
 2. **No HUD, art first.** No numbers on screen. The state of the world is read from the scene: piles of gold, a full or empty granary, hungry goblins, a town in decay. Text only when nothing else can say it.
 3. **Idle first.** Lovely to leave running for hours. The player steers, never controls.
 4. **Bittersweet.** Beings can die and are remembered. The cycle mourns and goes on.
-5. **Gritty 90s pixel art.** DOS-era grit with GBA-style detail: textured stone, mortar, worn edges, darkness lit by torches and windows. Beings 8x8 at most; big monsters 16x16.
+5. **Detailed, gritty pixel art at PSX level** (see *Art direction*): textured stone, mortar, worn edges, darkness lit by torches and windows. Beings about 16 x 24 px, big monsters 32 to 48 px (this replaces the earlier 8x8 limit).
+
+## Art direction: PSX-era detail
+The target is the detail of **Psygnosis games on the PlayStation** (mid-90s): rich, rendered-looking pixel art, not flat retro shapes.
+- **Many shades per material:** stone, wood, metal, skin and cloth each have highlights, mid-tones, shadows, texture and worn edges; dithering where it helps.
+- **Light makes the mood:** coloured light sources (torches, windows, neon, the sun) tint what is near them, with soft glows, deep shadows and ambient light that follows the hour.
+- **Depth:** several layers, with parallax or atmospheric fade, and foreground details framing the scene.
+- **Nothing visibly repeats:** variants of every tile and prop, mixed and decorated, so a wall or a forest never reads as a stamp.
+- **Readable life:** beings big enough to show what they are doing, with animation frames (walk, work, idle, a reaction).
+- A higher internal resolution than the first rounds (around **640 x 360**, scaled up crisply) to carry the detail.
 
 ## The world
 - **One run per device.** The player picks a real city (its real time and weather drive the town); the world adapts to the screen's shape once, when the run is founded.
@@ -25,6 +34,20 @@ A town on the surface and a dungeon beneath it, in one picture. The citizens wan
 - Every being has **needs, a mood, relationships and memories**, in the spirit of Dwarf Fortress. Their small stories emerge from that, not from scripts.
 - **The river** links the halves; the seed or the season decides its direction.
 
+## The dungeon is an ecosystem
+Not stacked corridors that look alike: a living underground made of **natural caves and built rooms**, joined by tunnels, shafts, ladders, rope lifts and the river.
+- **Caves:** irregular, natural shapes: water, roots, fungus, crystals, rubble, bones, nests.
+- **Rooms:** built by someone, once: cells, a library, a crypt, an armoury, a larder, a shrine, a forge, a throne room gone to ruin.
+- **Each level has a theme**, with its own materials, palette, light, inhabitants, sounds and part in the food chain. For example (invent your own; the seed should vary them):
+  1. **Cellars and old mines** right under the town: timber props, barrels, lanterns, where the two worlds touch.
+  2. **The fungus caves:** damp, glowing mushrooms, where the workers farm.
+  3. **The river grotto:** flooded halls, waterfalls, fish and things that eat fish.
+  4. **The crypts:** cold blue light, candles, bones; the lurkers' home, busier at night.
+  5. **The hoard:** deep, warm, gold glinting, the guardian asleep.
+- **The levels feed each other:** mushrooms feed the workers, the workers feed the beasts, the river carries food and waste down, gold travels up, town food travels down. Each level has its own small balance inside the big one.
+- **Levels change with the cycles:** dug deeper in a boom, flooded, collapsed or abandoned in a fall, resettled later.
+- How many levels show depends on the screen's shape (a phone shows more of them, stacked; a wide screen shows more of each).
+
 ## Steering
 - **Send groups:** a horn sends delvers down, a drum sends monsters up.
 - **Nudge fate,** once every 30 minutes: rain, a festival, a feast, wake the guardian... Every nudge **has consequences** that ripple into the cycle.
@@ -34,7 +57,8 @@ A town on the surface and a dungeon beneath it, in one picture. The citizens wan
 Generative (the Clockscapes `LOFI` engine, with its own style rows). The music follows which half the action is in (town tune or dungeon drone), the time of day (medieval by day, dungeon synth at night), the weather and the phase of the cycle.
 
 ## A first version must have
-- Both halves, filled with the detail of `inspiration/` (furnished dungeon floors, a real town street), on any screen shape.
+- Both halves, filled with the detail of `inspiration/` (a real town street; a dungeon of caves and rooms), on any screen shape.
+- At least **three themed levels** that look, sound and live differently, with both caves and rooms, and something visibly moving between levels (food, gold, water, beings).
 - Real time, day and night, and the weather of the picked city (Open-Meteo, working without it too).
 - The gold-for-food loop running visibly, with at least one full cycle swing.
 - A seeded cast from the bestiary, the river, and at least one rare event.
@@ -45,8 +69,18 @@ Generative (the Clockscapes `LOFI` engine, with its own style rows). The music f
 ## Free to invent
 How the beings look and move, what rare events exist, how a cycle shows on screen, the chronicle's voice, the town's layout, small details and surprises. Make it yours.
 
-## Not wanted (seen in the first round)
+## Not wanted
 Flat plain colours and empty dirt bands; tiny hints nobody can read; a scene that looks the same after ten minutes.
+
+## Known bugs and lessons (rounds one and two)
+Don't repeat these.
+- **Silent on phones** (round two, dungeon and civilization): the sound was started on `pointerdown`, which a phone's touch doesn't count as a user gesture. Start it on `pointerup` or `click`.
+- **Only night was ever seen** (round two, all): both rounds ran at night, so day, dusk and rain went untested. Support `?hour=HH` (and `?weather=rain|snow|clear` where weather matters) to force them, and look at day, dusk and night.
+- **Built blind** (round one, all): nobody opened the page. Look at it, more than once.
+- **Hints too faint or stuck** (round one): the first-tap hint was nearly invisible, or never went away.
+- **Features nobody can find** (round two): things built but never seen in a judge's run. Make each one show up on its own while idle at least once in the first minutes.
+- Round one: flat plain colours and empty dirt bands between the floors; music came out as a fife over keys, not dungeon synth.
+- Round two: every floor repeats the same brick and torch pattern; the beings are tiny against the scene; after 5 minutes the only clear change was a bigger gold pile; no city picker, no real weather, no ages and no rare event seen on screen.
 
 ## Done means
 It runs in one `index.html` (PWA, offline), with no console errors, and you'd happily leave it on a second screen all evening.
@@ -77,8 +111,14 @@ Dwarf Fortress (depth of the beings' lives), Diablo (a town turned grim), dungeo
 ## Rules
 
 ### What it is made of
-- **One `index.html`** holds everything: HTML, CSS, JavaScript, the pixel art (drawn in code or stored as data in the file) and the sound (Web Audio). No build step, no framework, no dependencies.
-- Beside it, only what a **PWA** needs: `manifest.webmanifest`, `sw.js` (offline cache) and `icons/`. It installs and runs offline after the first visit.
+- **Code in one `index.html`:** HTML, CSS, JavaScript and the sound (Web Audio). No build step, no framework, no dependencies.
+- **Graphics in separate files, in `art/`,** so they can be improved on their own without touching the code:
+  - PNG sprite sheets and tilesets (`art/<name>.png`), each with a small JSON beside it (`art/<name>.json`) listing its frames: name, x, y, w, h, anchor, and animations (frames and speed).
+  - `art/index.json` lists every sheet. The code loads that list at start and draws only from it. Nothing graphical is hard-coded in the script beyond effects (light, glow, rain, particles, fades, screen filters).
+  - Replacing a PNG with a better one of the same layout needs **no code change**. A missing or broken sheet must not crash: draw a plain placeholder and log one warning.
+  - How the art is made is free (drawn, painted, or generated by a script). If a script generates it, keep the script in `tools/` so it can be run again, and keep its output in `art/`.
+  - Total art under about 5 MB.
+- Beside them, what a **PWA** needs: `manifest.webmanifest`, `sw.js` (it caches `index.html` and every file listed in `art/index.json`) and `icons/`. It installs and runs offline after the first visit.
 - **Network:** Allowed: real weather from `https://api.open-meteo.com` for the picked city (cache it; the toy must work fully without it). Nothing else.
 - **Only free and open fonts and code** (SIL OFL, MIT, LGPL, CC0...), credited in the page. No web fonts loaded from outside: embed them or draw the letters.
 - **Original art only.** The pictures in `inspiration/` and the games named below are mood references: never copy, trace or ship them, and no characters, logos or scenes from existing works.
@@ -101,7 +141,7 @@ Our own code in `TP/` (read-only: never change the originals; say in the docs wh
 
 ### Working on it
 - The owner's rules apply: commit only as `utopick <310144039+utopick@users.noreply.github.com>` (`git -c user.name=utopick -c user.email=310144039+utopick@users.noreply.github.com commit --author="utopick <310144039+utopick@users.noreply.github.com>"`), never the owner's real name or any other account; a `Co-Authored-By: Claude` trailer is fine. **Ask before anything outward-facing** (pushing, tags, releases, publishing). No temp files in the project; scratch work goes elsewhere. Use they/them for people unless told otherwise.
-- **Look at what you build.** Serve the folder (`python3 -m http.server 8090`, then `http://localhost:8090/`) and take screenshots (headless Chrome) at a phone size (390 x 844), a desktop (1920 x 1080) and after a few minutes of idling. Check the console has no errors. Every bug in the first round would have been caught by one look.
+- **Look at what you build.** Serve the folder (`python3 -m http.server 8090`, then `http://localhost:8090/`) and take screenshots (headless Chrome) at a phone size (390 x 844), a desktop (1920 x 1080) and after a few minutes of idling. Check the console has no errors. Also look at day, dusk and night with `?hour=`, and check after a tap that the sound really started (the `AudioContext` state is `running`). Every bug in the first round would have been caught by one look.
 - Keep a `docs/MAINTAINING.md` (how it works inside, what to run) and a `README.md` (what it is, credits), and add tests for the simulation where it can be tested without a screen (`node --test`).
 
 ### Licences and credits

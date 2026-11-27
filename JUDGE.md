@@ -32,12 +32,13 @@ Keep time with `date`. You can't stop the contestants yourself: at the end time,
 
 ## 3. Judge (when the owner says time is up)
 For each entry, without changing it:
-1. **Files and rules:** `index.html`, `manifest.webmanifest`, `sw.js`, icons, `NOTES.md`; the manifest is linked and the service worker registered; no requests to any host except `api.open-meteo.com` (grep for `http`, `fetch`, `import`, `<link`, `<script src`); `innerHTML` only with fixed or escaped text; nothing written outside its folder (check `git status` in nearby repos and the modification times in `idletoys/`).
-2. **Look:** run the look tool on it (both sizes, 5 s, 60 s, after a tap), plus one run of **5 minutes idle** at 1920 x 1080 to see if it lives and changes. Read the console log.
-3. **Against its brief:** go through the "A first version must have" list in its `IDEA.md` and mark each item: done, partial, missing. Check the pillars and the "Not wanted" list.
+1. **Files and rules:** `index.html`, an `art/` folder with PNG sheets, a JSON per sheet and `art/index.json` (check the sheets really load from that list and that no graphics are hard-coded in the script beyond effects), `manifest.webmanifest`, `sw.js` caching the art, icons, `NOTES.md`; the manifest is linked and the service worker registered; no requests to any host except `api.open-meteo.com` (grep for `http`, `fetch`, `import`, `<link`, `<script src`); `innerHTML` only with fixed or escaped text; nothing written outside its folder (check `git status` in nearby repos and the modification times in `idletoys/`).
+2. **Look:** run the look tool on it (both sizes, 5 s, 60 s, after a tap, and with `?hour=13` and `?hour=20` for day and dusk), plus one run of **5 minutes idle** at 1920 x 1080 to see if it lives and changes. Read the console log.
+3. **Against its brief:** check the *Known bugs and lessons* list first (none may come back), then go through the "A first version must have" list in its `IDEA.md` and mark each item: done, partial, missing. Check the pillars and the "Not wanted" list.
 4. **Score** each 1 to 5: Artfulness, Polish, Idle, Steering, Music, Faithful (to the brief), Room to grow. Say plainly what you could not check (you can't hear the music: judge it from the code and say so; you can't test on a real phone).
 5. **Write** `idletoys/gauntlet_results/<round>/RESULTS.md`: the timings, the rule checks, a score table, and for each entry one paragraph of what works and what doesn't, with its screenshots beside it (copy the best ones into that folder; keep it under about 10 pictures). End with "What to change next time" about the contest itself. Compare with round one where it helps.
-6. Leave the server running unless the owner asks you to stop it, and delete any scratch files you made outside `gauntlet_results/` and `tools/`.
+6. **Update the landing page** (`idletoys/index.html`): for each idea, add the new entry as a round button (`R3`, `R4`... linking to its folder, with the model's name in its `title`), point PLAY at the entry you rank best for that idea (or the newest, if the owner prefers), and replace a banner in `img/` only if the new entry looks clearly better (a 1920 x 480 crop of a screenshot). Never remove older rounds: the page shows the evolution.
+7. Leave the server running unless the owner asks you to stop it, and delete any scratch files you made outside `gauntlet_results/` and `tools/`.
 
 ## Your own rules
 - Never edit, fix or delete a contestant's files. Never use git, push or publish. Don't change anything outside `idletoys/` except reading.
