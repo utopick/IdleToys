@@ -1,0 +1,20 @@
+{
+ "sheets": [
+  {
+   "name": "terrain",
+   "json": "terrain.json"
+  },
+  {
+   "name": "buildings",
+   "json": "buildings.json"
+  },
+  {
+   "name": "props",
+   "json": "props.json"
+  },
+  {
+   "name": "beings",
+   "json": "beings.json"
+  }
+ ]
+}
